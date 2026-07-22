@@ -1,0 +1,9 @@
+.tools/
+upstream/
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.log
+.DS_Store
