@@ -59,8 +59,11 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            controller?.StopAllAsync().GetAwaiter().GetResult();
-            HostsFileService.RemoveAllHosts();
+            if (controller?.RestoreHostsOnExit == true)
+            {
+                controller.StopAllAsync().GetAwaiter().GetResult();
+                HostsFileService.RemoveAllHosts();
+            }
         }
         catch { }
         if (trayIcon is not null)

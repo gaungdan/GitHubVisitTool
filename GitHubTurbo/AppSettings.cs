@@ -1,35 +1,71 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace GitHubTurbo;
 
-public sealed record AppSettings(string UpstreamProxyUrl)
+public sealed class AppSettings
 {
-    public static readonly AppSettings Default = new(string.Empty);
-
-    public static async Task<AppSettings> LoadAsync(CancellationToken cancellationToken)
+    static readonly JsonSerializerOptions JsonOptions = new()
     {
-        if (!File.Exists(AppPaths.SettingsPath))
-            return Default;
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
 
+    public List<string> EnabledPlatforms { get; set; } = [];
+
+    public bool RestoreHostsOnExit { get; set; }
+
+    public bool AutoRefreshOnLaunch { get; set; }
+
+    public static async Task<AppSettings> LoadAsync()
+    {
         try
         {
+            AppPaths.EnsureDirectories();
+            if (!File.Exists(AppPaths.SettingsPath))
+            {
+                var settings = new AppSettings();
+                await settings.SaveAsync();
+                return settings;
+            }
+
             await using var stream = File.OpenRead(AppPaths.SettingsPath);
-            return await JsonSerializer.DeserializeAsync<AppSettings>(stream, cancellationToken: cancellationToken) ?? Default;
+            return await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions) ?? new AppSettings();
         }
-        catch (JsonException)
+        catch (Exception ex)
         {
-            await AppLogger.ErrorAsync("Unable to read application settings.");
-            return Default;
+            await AppLogger.ErrorAsync($"Load settings failed: {ex.GetType().Name}: {ex.Message}");
+            return new AppSettings();
         }
     }
 
-    public async Task SaveAsync(CancellationToken cancellationToken)
+    public async Task SaveAsync()
     {
-        AppPaths.EnsureDirectories();
-        var temporaryPath = $"{AppPaths.SettingsPath}.tmp";
-        var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(temporaryPath, json, cancellationToken);
-        File.Move(temporaryPath, AppPaths.SettingsPath, overwrite: true);
+        try
+        {
+            AppPaths.EnsureDirectories();
+            var tempPath = AppPaths.SettingsPath + ".tmp";
+            await using (var stream = File.Create(tempPath))
+            {
+                await JsonSerializer.SerializeAsync(stream, this, JsonOptions);
+            }
+
+            File.Move(tempPath, AppPaths.SettingsPath, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            await AppLogger.ErrorAsync($"Save settings failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    public void SetPlatformEnabled(string platformId, bool enabled)
+    {
+        EnabledPlatforms = EnabledPlatforms
+            .Where(x => !x.Equals(platformId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (enabled)
+            EnabledPlatforms.Add(platformId);
     }
 }

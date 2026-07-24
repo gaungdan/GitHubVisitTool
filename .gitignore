@@ -1,5 +1,7 @@
 .tools/
 upstream/
+GitHubTurbo/publish/
+GitHubTurbo/single-file/
 bin/
 obj/
 *.user

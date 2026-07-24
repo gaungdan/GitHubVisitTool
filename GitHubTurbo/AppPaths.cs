@@ -9,12 +9,14 @@ public static class AppPaths
         "GitHubTurbo");
 
     public static readonly string LogDirectory = Path.Combine(RootDirectory, "logs");
+    public static readonly string BackupDirectory = Path.Combine(RootDirectory, "backups");
     public static readonly string SettingsPath = Path.Combine(RootDirectory, "settings.json");
-    public static readonly string ProxyStatePath = Path.Combine(RootDirectory, "system-proxy-state.json");
+    public static readonly string IpCachePath = Path.Combine(RootDirectory, "ip-cache.json");
 
     public static void EnsureDirectories()
     {
         Directory.CreateDirectory(RootDirectory);
         Directory.CreateDirectory(LogDirectory);
+        Directory.CreateDirectory(BackupDirectory);
     }
 }

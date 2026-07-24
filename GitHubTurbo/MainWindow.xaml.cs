@@ -11,6 +11,7 @@ public partial class MainWindow : Window
 {
     readonly AppController controller;
     string? activePlatformId;
+    bool isApplyingSettings;
 
     public ObservableCollection<PlatformModuleViewModel> PlatformModules { get; } = new();
     public ObservableCollection<DomainDiagnosticViewModel> DomainTests { get; } = new();
@@ -21,6 +22,10 @@ public partial class MainWindow : Window
         this.controller = controller;
         DataContext = this;
         controller.PlatformStatusChanged += Controller_PlatformStatusChanged;
+        isApplyingSettings = true;
+        RestoreOnExitCheckBox.IsChecked = controller.Settings.RestoreHostsOnExit;
+        AutoRefreshOnLaunchCheckBox.IsChecked = controller.Settings.AutoRefreshOnLaunch;
+        isApplyingSettings = false;
 
         foreach (var provider in PlatformProviders.All)
         {
@@ -40,7 +45,7 @@ public partial class MainWindow : Window
         {
             activePlatformId = PlatformModules[0].PlatformId;
             PlatformModules[0].IsActive = true;
-            foreach (var domain in PlatformProviders.All[0].Domains)
+            foreach (var domain in PlatformDiagnostics.GetDiagnosticDomains(PlatformProviders.All[0]))
                 DomainTests.Add(new DomainDiagnosticViewModel(domain.Domain, domain.Label));
         }
 
@@ -61,7 +66,7 @@ public partial class MainWindow : Window
         var provider = PlatformProviders.GetById(vm.PlatformId);
         if (provider is not null)
         {
-            foreach (var domain in provider.Domains)
+            foreach (var domain in PlatformDiagnostics.GetDiagnosticDomains(provider))
                 DomainTests.Add(new DomainDiagnosticViewModel(domain.Domain, domain.Label));
         }
 
@@ -78,9 +83,14 @@ public partial class MainWindow : Window
     {
         if (activePlatformId is null) return;
         await RunActionAsync(() => controller.StopPlatformAsync(activePlatformId));
+        MainTabs.SelectedIndex = 0;
     }
 
-    async void DiagnoseButton_Click(object sender, RoutedEventArgs e) => await RunNetworkTestAsync();
+    async void DiagnoseButton_Click(object sender, RoutedEventArgs e)
+    {
+        MainTabs.SelectedIndex = 1;
+        await RunNetworkTestAsync();
+    }
 
     void OpenLogsButton_Click(object sender, RoutedEventArgs e)
     {
@@ -89,6 +99,46 @@ public partial class MainWindow : Window
             FileName = AppPaths.LogDirectory,
             UseShellExecute = true,
         });
+    }
+
+    async void BackupHostsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var result = await controller.BackupHostsAsync();
+        System.Windows.MessageBox.Show(result.Message, "hosts 备份", MessageBoxButton.OK,
+            result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+    }
+
+    async void RestoreHostsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var confirm = System.Windows.MessageBox.Show(
+            "将使用最近一次备份覆盖当前 hosts 文件，是否继续？",
+            "恢复 hosts",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes)
+            return;
+
+        var result = await controller.RestoreLatestBackupAsync();
+        System.Windows.MessageBox.Show(result.Message, "恢复 hosts", MessageBoxButton.OK,
+            result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        if (activePlatformId is not null)
+            RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId) ?? TurboStatus.Stopped);
+    }
+
+    async void RestoreOnExitCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (isApplyingSettings)
+            return;
+
+        await controller.SetRestoreHostsOnExitAsync(RestoreOnExitCheckBox.IsChecked == true);
+    }
+
+    async void AutoRefreshOnLaunchCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (isApplyingSettings)
+            return;
+
+        await controller.SetAutoRefreshOnLaunchAsync(AutoRefreshOnLaunchCheckBox.IsChecked == true);
     }
 
     void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;

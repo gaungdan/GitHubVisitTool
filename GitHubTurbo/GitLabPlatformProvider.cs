@@ -14,7 +14,7 @@ public sealed class GitLabPlatformProvider : IPlatformProvider
     static readonly PlatformDomain[] _domains =
     [
         new("主站", "gitlab.com"),
-        new("API", "gitlab.com/api"),
+        new("API", "gitlab.com"),
         new("Pages", "gitlab.io"),
         new("Registry", "registry.gitlab.com"),
         new("Assets", "assets.gitlab-static.net"),

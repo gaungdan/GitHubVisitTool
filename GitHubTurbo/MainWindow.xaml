@@ -208,6 +208,14 @@
             </Setter>
         </Style>
 
+        <Style x:Key="CompactPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinWidth" Value="96" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="0" />
+        </Style>
+
         <!-- Section Panel -->
         <Style x:Key="SectionPanelStyle" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource Bg1Brush}" />
@@ -419,12 +427,27 @@
                                  </StackPanel>
                              </Border>
                          </StackPanel>
-                         <TextBlock x:Name="StatusDetailText"
-                                    Text="点击启动加速后，将修改 hosts 文件以加速 GitHub 访问。"
-                                    FontSize="11"
-                                    Foreground="{StaticResource Text1Brush}"
-                                    TextWrapping="Wrap" />
-                     </StackPanel>
+                          <TextBlock x:Name="StatusDetailText"
+                                     Text="点击启动加速后，将修改 hosts 文件以加速 GitHub 访问。"
+                                     FontSize="11"
+                                     Foreground="{StaticResource Text1Brush}"
+                                     TextWrapping="Wrap" />
+                          <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                              <CheckBox x:Name="RestoreOnExitCheckBox"
+                                        Content="退出时还原 hosts"
+                                        Foreground="{StaticResource Text1Brush}"
+                                        FontSize="12"
+                                        Margin="0,0,18,0"
+                                        Checked="RestoreOnExitCheckBox_Changed"
+                                        Unchecked="RestoreOnExitCheckBox_Changed" />
+                              <CheckBox x:Name="AutoRefreshOnLaunchCheckBox"
+                                        Content="启动时自动刷新"
+                                        Foreground="{StaticResource Text1Brush}"
+                                        FontSize="12"
+                                        Checked="AutoRefreshOnLaunchCheckBox_Changed"
+                                        Unchecked="AutoRefreshOnLaunchCheckBox_Changed" />
+                          </StackPanel>
+                      </StackPanel>
 
                      <!-- Action Buttons -->
                      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -446,18 +469,31 @@
                                 <TextBlock Text="检测" Margin="8,0,0,0" />
                             </StackPanel>
                         </Button>
-                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="OpenLogsButton_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE81C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
-                                <TextBlock Text="日志" Margin="8,0,0,0" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
+                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="OpenLogsButton_Click">
+                             <StackPanel Orientation="Horizontal">
+                                 <TextBlock Text="&#xE81C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
+                                 <TextBlock Text="日志" Margin="8,0,0,0" />
+                             </StackPanel>
+                         </Button>
+                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="BackupHostsButton_Click">
+                             <StackPanel Orientation="Horizontal">
+                                 <TextBlock Text="&#xE74E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
+                                 <TextBlock Text="备份" Margin="8,0,0,0" />
+                             </StackPanel>
+                         </Button>
+                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="RestoreHostsButton_Click">
+                             <StackPanel Orientation="Horizontal">
+                                 <TextBlock Text="&#xE72C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
+                                 <TextBlock Text="恢复" Margin="8,0,0,0" />
+                             </StackPanel>
+                         </Button>
+                     </StackPanel>
                 </Grid>
             </Border>
 
             <!-- Tab Content -->
-            <TabControl Grid.Row="1"
+            <TabControl x:Name="MainTabs"
+                        Grid.Row="1"
                         Margin="24,16,24,20"
                         Background="Transparent"
                         BorderThickness="0"
@@ -601,21 +637,26 @@
                 <TabItem Header="网络检测" Style="{StaticResource ModernTabItemStyle}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="0,16,0,0">
-                            <DockPanel Margin="0,0,0,14">
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
                                 <TextBlock Text="网络连通性检测"
                                            FontSize="15"
                                            FontWeight="SemiBold"
-                                           Foreground="{StaticResource Text0Brush}" />
-                                <Button DockPanel.Dock="Right"
-                                        Style="{StaticResource PrimaryButtonStyle}"
+                                           Foreground="{StaticResource Text0Brush}"
+                                           VerticalAlignment="Center" />
+                                <Button Grid.Column="1"
+                                        Style="{StaticResource CompactPrimaryButtonStyle}"
                                         Click="DiagnoseButton_Click"
-                                        Padding="20,0">
+                                        VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE9D2;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
-                                        <TextBlock Text="开始检测" Margin="8,0,0,0" />
+                                        <TextBlock Text="&#xE9D2;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" />
+                                        <TextBlock Text="开始检测" Margin="7,0,0,0" />
                                     </StackPanel>
                                 </Button>
-                            </DockPanel>
+                            </Grid>
 
                             <Border Style="{StaticResource SectionPanelStyle}" Padding="0,0,0,0">
                                 <Grid>
