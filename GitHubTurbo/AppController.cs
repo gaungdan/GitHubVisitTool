@@ -594,7 +594,7 @@ public sealed record PlatformStatusChangedEventArgs(string PlatformId, TurboStat
 
 sealed record DohEndpoint(string Name, string Template);
 
-sealed record ResolvedIpCandidate(string Ip, string Source);
+public sealed record ResolvedIpCandidate(string Ip, string Source);
 
 sealed record IpProbeResult(ResolvedIpCandidate Candidate, DiagnosticResult Diagnostic);
 

@@ -40,5 +40,17 @@ public sealed class GitHubPlatformProvider : IPlatformProvider
         new("静态加速", "github-com.s3.amazonaws.com"),
         new("Gist文件", "gist.githubusercontent.com"),
         new("桌面资源", "desktop.githubusercontent.com"),
+        new("文件上传", "uploads.github.com"),
+        new("媒体资源", "media.githubusercontent.com"),
+        new("私有图片", "private-user-images.githubusercontent.com"),
+        new("教育", "education.github.com"),
+        new("商店", "shop.github.com"),
+        new("Copilot", "copilot.github.com"),
+        new("Copilot代理", "copilot-proxy.githubusercontent.com"),
+        new("Alive", "alive.github.com"),
+        new("Schema", "schema.github.com"),
+        new("资源中心", "resources.github.com"),
+        new("安全", "security.github.com"),
+        new("导入", "import.github.com"),
     ];
 }

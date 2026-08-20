@@ -1,6 +1,6 @@
 namespace GitHubTurbo;
 
-static class IpSelectionHelpers
+public static class IpSelectionHelpers
 {
     public static IReadOnlyList<ResolvedIpCandidate> Interleave(
         IReadOnlyList<IReadOnlyList<ResolvedIpCandidate>> sources,

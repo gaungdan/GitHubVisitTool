@@ -23,6 +23,18 @@ public static class PlatformDiagnostics
         "githubstatus.com",
         "github-cloud.s3.amazonaws.com",
         "github-com.s3.amazonaws.com",
+        "uploads.github.com",
+        "media.githubusercontent.com",
+        "private-user-images.githubusercontent.com",
+        "education.github.com",
+        "shop.github.com",
+        "copilot.github.com",
+        "copilot-proxy.githubusercontent.com",
+        "alive.github.com",
+        "schema.github.com",
+        "resources.github.com",
+        "security.github.com",
+        "import.github.com",
     };
 
     static readonly HashSet<string> GitLabCriticalDomains = new(StringComparer.OrdinalIgnoreCase)
