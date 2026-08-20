@@ -12,6 +12,11 @@ public partial class MainWindow : Window
     readonly AppController controller;
     string? activePlatformId;
     bool isApplyingSettings;
+    readonly Progress<PlatformProgressEventArgs> progress;
+    readonly SolidColorBrush _runningBrush;
+    readonly SolidColorBrush _stoppedBrush;
+    readonly System.Windows.Media.Effects.DropShadowEffect _runningEffect;
+    readonly System.Windows.Media.Effects.DropShadowEffect _stoppedEffect;
 
     public ObservableCollection<PlatformModuleViewModel> PlatformModules { get; } = new();
     public ObservableCollection<DomainDiagnosticViewModel> DomainTests { get; } = new();
@@ -22,6 +27,23 @@ public partial class MainWindow : Window
         this.controller = controller;
         DataContext = this;
         controller.PlatformStatusChanged += Controller_PlatformStatusChanged;
+        progress = new(OnProgressChanged);
+        _runningBrush = new(System.Windows.Media.Color.FromRgb(16, 185, 129));
+        _stoppedBrush = new(System.Windows.Media.Color.FromRgb(100, 116, 139));
+        _runningEffect = new()
+        {
+            ShadowDepth = 0,
+            BlurRadius = 12,
+            Color = System.Windows.Media.Color.FromRgb(16, 185, 129),
+            Opacity = 0.6,
+        };
+        _stoppedEffect = new()
+        {
+            ShadowDepth = 0,
+            BlurRadius = 6,
+            Color = System.Windows.Media.Color.FromRgb(100, 116, 139),
+            Opacity = 0.3,
+        };
         isApplyingSettings = true;
         RestoreOnExitCheckBox.IsChecked = controller.Settings.RestoreHostsOnExit;
         AutoRefreshOnLaunchCheckBox.IsChecked = controller.Settings.AutoRefreshOnLaunch;
@@ -40,6 +62,8 @@ public partial class MainWindow : Window
             vm.PropertyChanged += PlatformModule_PropertyChanged;
             PlatformModules.Add(vm);
         }
+
+        RefreshAllHostsIps();
 
         if (PlatformModules.Count > 0)
         {
@@ -73,10 +97,26 @@ public partial class MainWindow : Window
         RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId) ?? TurboStatus.Stopped);
     }
 
+    void RefreshAllHostsIps()
+    {
+        foreach (var provider in PlatformProviders.All)
+            RefreshHostsIpsForPlatform(provider.Descriptor.Id);
+    }
+
+    void RefreshHostsIpsForPlatform(string platformId)
+    {
+        var entries = HostsFileService.ReadEntries(platformId);
+        var vm = PlatformModules.FirstOrDefault(m => m.PlatformId == platformId);
+        if (vm is null) return;
+
+        foreach (var domain in vm.Domains)
+            domain.CurrentIp = entries.TryGetValue(domain.Domain, out var ip) ? ip : null;
+    }
+
     async void StartButton_Click(object sender, RoutedEventArgs e)
     {
         if (activePlatformId is null) return;
-        await RunActionAsync(() => controller.StartPlatformAsync(activePlatformId));
+        await RunActionAsync(() => controller.StartPlatformAsync(activePlatformId, progress));
     }
 
     async void StopButton_Click(object sender, RoutedEventArgs e)
@@ -167,14 +207,21 @@ public partial class MainWindow : Window
         StartButton.IsEnabled = false;
         StopButton.IsEnabled = false;
         DiagnoseButton.IsEnabled = false;
+        ShowProgress();
         try
         {
             await action();
         }
         finally
         {
+            HideProgress();
             if (activePlatformId is not null)
+            {
+                RefreshHostsIpsForPlatform(activePlatformId);
                 RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId) ?? TurboStatus.Stopped);
+            }
+            StartButton.IsEnabled = true;
+            StopButton.IsEnabled = true;
             DiagnoseButton.IsEnabled = true;
         }
     }
@@ -182,6 +229,9 @@ public partial class MainWindow : Window
     async Task RunNetworkTestAsync()
     {
         DiagnoseButton.IsEnabled = false;
+        StartButton.IsEnabled = false;
+        StopButton.IsEnabled = false;
+        ShowProgress();
         try
         {
             if (activePlatformId is null) return;
@@ -194,12 +244,15 @@ public partial class MainWindow : Window
             }
 
             SetDomainTestsPlaceholder("测试中...", "正在检测连通性");
-            var results = await controller.RunDomainDiagnosticsAsync(activePlatformId);
+            var results = await controller.RunDomainDiagnosticsAsync(activePlatformId, progress);
             ApplyDomainResults(results);
         }
         finally
         {
+            HideProgress();
             DiagnoseButton.IsEnabled = true;
+            StartButton.IsEnabled = true;
+            StopButton.IsEnabled = true;
             if (activePlatformId is not null)
                 RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId) ?? TurboStatus.Stopped);
         }
@@ -240,6 +293,38 @@ public partial class MainWindow : Window
         });
     }
 
+    void OnProgressChanged(PlatformProgressEventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            ProgressBar.Value = e.ProgressPercent;
+            ProgressText.Text = e.StepDescription;
+            if (e.ProgressPercent > 0 && e.ProgressPercent < 100)
+            {
+                ProgressBar.Visibility = Visibility.Visible;
+                ProgressText.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                ProgressBar.Visibility = Visibility.Collapsed;
+                ProgressText.Visibility = Visibility.Collapsed;
+            }
+        });
+    }
+
+    void ShowProgress()
+    {
+        ProgressBar.Value = 0;
+        ProgressBar.Visibility = Visibility.Visible;
+        ProgressText.Visibility = Visibility.Visible;
+    }
+
+    void HideProgress()
+    {
+        ProgressBar.Visibility = Visibility.Collapsed;
+        ProgressText.Visibility = Visibility.Collapsed;
+    }
+
     void RenderStatus(TurboStatus? status)
     {
         status ??= TurboStatus.Stopped;
@@ -247,25 +332,13 @@ public partial class MainWindow : Window
         StatusDetailText.Text = status.Detail;
         if (status.IsRunning)
         {
-            StatusIndicator.Fill = new SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
-            StatusIndicator.Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                ShadowDepth = 0,
-                BlurRadius = 12,
-                Color = System.Windows.Media.Color.FromRgb(16, 185, 129),
-                Opacity = 0.6,
-            };
+            StatusIndicator.Fill = _runningBrush;
+            StatusIndicator.Effect = _runningEffect;
         }
         else
         {
-            StatusIndicator.Fill = new SolidColorBrush(System.Windows.Media.Color.FromRgb(100, 116, 139));
-            StatusIndicator.Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                ShadowDepth = 0,
-                BlurRadius = 6,
-                Color = System.Windows.Media.Color.FromRgb(100, 116, 139),
-                Opacity = 0.3,
-            };
+            StatusIndicator.Fill = _stoppedBrush;
+            StatusIndicator.Effect = _stoppedEffect;
         }
         StartButton.IsEnabled = !status.IsRunning;
         StopButton.IsEnabled = status.IsRunning;

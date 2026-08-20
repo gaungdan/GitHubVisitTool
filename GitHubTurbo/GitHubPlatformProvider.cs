@@ -11,6 +11,8 @@ public sealed class GitHubPlatformProvider : IPlatformProvider
 
     public IReadOnlyList<PlatformDomain> Domains => _domains;
 
+    public bool HasLegacyEntries => HostsFileService.HasLegacyEntries;
+
     static readonly PlatformDomain[] _domains =
     [
         new("主站", "github.com"),

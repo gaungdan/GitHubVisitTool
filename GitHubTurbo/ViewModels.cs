@@ -5,7 +5,35 @@ using Color = System.Windows.Media.Color;
 
 namespace GitHubTurbo;
 
-public sealed record DomainEntry(string Prefix, string Domain);
+public sealed class DomainEntry : INotifyPropertyChanged
+{
+    string? _currentIp;
+
+    public DomainEntry(string prefix, string domain)
+    {
+        Prefix = prefix;
+        Domain = domain;
+    }
+
+    public string Prefix { get; }
+    public string Domain { get; }
+
+    public string? CurrentIp
+    {
+        get => _currentIp;
+        set
+        {
+            if (_currentIp == value) return;
+            _currentIp = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
 
 public sealed class PlatformModuleViewModel : INotifyPropertyChanged
 {

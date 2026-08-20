@@ -27,23 +27,35 @@ public partial class App : System.Windows.Application
         CreateTrayIcon();
 
         mainWindow = new MainWindow(controller);
+        mainWindow.Closing += MainWindow_Closing;
         mainWindow.Closed += (_, _) =>
         {
             trayIcon!.Visible = false;
             trayIcon!.Dispose();
             trayIcon = null;
-            Environment.Exit(0);
         };
         mainWindow.Show();
     }
 
+    void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (!_isShuttingDown)
+        {
+            e.Cancel = true;
+            mainWindow!.Hide();
+        }
+    }
+
+    bool _isShuttingDown;
+
     void CreateTrayIcon()
     {
         var menu = new Forms.ContextMenuStrip();
+        menu.Items.Add("显示主窗口", null, (_, _) => ShowMainWindow());
         menu.Items.Add("启动全部加速", null, async (_, _) => await controller!.StartAllAsync());
         menu.Items.Add("停止全部加速", null, async (_, _) => await controller!.StopAllAsync());
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => mainWindow?.Close());
+        menu.Items.Add("退出", null, (_, _) => Shutdown());
 
         trayIcon = new Forms.NotifyIcon
         {
@@ -52,7 +64,23 @@ public partial class App : System.Windows.Application
             Visible = true,
             ContextMenuStrip = menu,
         };
-        trayIcon.DoubleClick += (_, _) => mainWindow?.Close();
+        trayIcon.DoubleClick += (_, _) => ShowMainWindow();
+    }
+
+    void ShowMainWindow()
+    {
+        if (mainWindow is null) return;
+        mainWindow.Show();
+        if (mainWindow.WindowState == WindowState.Minimized)
+            mainWindow.WindowState = WindowState.Normal;
+        mainWindow.Activate();
+    }
+
+    new void Shutdown()
+    {
+        _isShuttingDown = true;
+        mainWindow?.Close();
+        Shutdown(0);
     }
 
     protected override void OnExit(ExitEventArgs e)

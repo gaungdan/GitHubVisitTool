@@ -16,8 +16,9 @@ public static class AppLogger
         try
         {
             AppPaths.EnsureDirectories();
-            var path = Path.Combine(AppPaths.LogDirectory, $"turbo-{DateTime.UtcNow:yyyy-MM-dd}.log");
-            var line = $"{DateTimeOffset.Now:O} [{level}] {message}{Environment.NewLine}";
+            var now = DateTimeOffset.UtcNow;
+            var path = Path.Combine(AppPaths.LogDirectory, $"turbo-{now:yyyy-MM-dd}.log");
+            var line = $"{now:O} [{level}] {message}{Environment.NewLine}";
             await Gate.WaitAsync();
             try
             {

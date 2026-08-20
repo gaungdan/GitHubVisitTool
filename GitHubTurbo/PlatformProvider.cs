@@ -19,6 +19,11 @@ public interface IPlatformProvider
 
     string MarkerStart => $"# {Descriptor.Id} Start";
     string MarkerEnd => $"# {Descriptor.Id} End";
+
+    /// <summary>
+    /// Whether this platform has legacy hosts entries from an older version that should be migrated.
+    /// </summary>
+    bool HasLegacyEntries => false;
 }
 
 public static class PlatformProviders

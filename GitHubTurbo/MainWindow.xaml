@@ -14,7 +14,12 @@
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         ResizeMode="CanResize"
-        FontFamily="Segoe UI, Microsoft YaHei UI">
+        FontFamily="Segoe UI, Microsoft YaHei UI"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextHintingMode="Auto"
+        RenderOptions.BitmapScalingMode="HighQuality"
+        SnapsToDevicePixels="True">
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0" CornerRadius="12" GlassFrameThickness="0" ResizeBorderThickness="6" />
     </WindowChrome.WindowChrome>
@@ -51,10 +56,9 @@
         <SolidColorBrush x:Key="BadBrush" Color="{StaticResource Bad}" />
         <SolidColorBrush x:Key="BadLightBrush" Color="{StaticResource BadLight}" />
 
-        <!-- Drop Shadow -->
-        <DropShadowEffect x:Key="CardShadow" ShadowDepth="2" BlurRadius="12" Opacity="0.08" Color="#1E293B" />
-        <DropShadowEffect x:Key="HeaderShadow" ShadowDepth="1" BlurRadius="6" Opacity="0.06" Color="#1E293B" />
-        <DropShadowEffect x:Key="ButtonShadow" ShadowDepth="1" BlurRadius="4" Opacity="0.15" Color="#3B82F6" />
+        <!-- Drop Shadow (reduced blur for crispness) -->
+        <DropShadowEffect x:Key="CardShadow" ShadowDepth="1" BlurRadius="4" Opacity="0.06" Color="#1E293B" />
+        <DropShadowEffect x:Key="HeaderShadow" ShadowDepth="1" BlurRadius="3" Opacity="0.04" Color="#1E293B" />
 
         <!-- Window Control Buttons -->
         <Style x:Key="WindowButtonStyle" TargetType="Button">
@@ -65,13 +69,20 @@
             <Setter Property="Foreground" Value="{StaticResource Text2Brush}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Root"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="6">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                CornerRadius="6"
+                                SnapsToDevicePixels="True"
+                                UseLayoutRounding="True">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              SnapsToDevicePixels="True"
+                                              TextOptions.TextFormattingMode="Display" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -102,6 +113,9 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FontSize" Value="13" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+            <Setter Property="TextOptions.TextHintingMode" Value="Auto" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -110,13 +124,18 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="8"
+                                SnapsToDevicePixels="True"
+                                UseLayoutRounding="True"
                                 RenderTransformOrigin="0.5,0.5">
-                            <Border.RenderTransform>
+                            <Border.LayoutTransform>
                                 <ScaleTransform ScaleX="1" ScaleY="1" />
-                            </Border.RenderTransform>
+                            </Border.LayoutTransform>
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
-                                              Margin="{TemplateBinding Padding}" />
+                                              Margin="{TemplateBinding Padding}"
+                                              RecognizesAccessKey="True"
+                                              SnapsToDevicePixels="True"
+                                              TextOptions.TextFormattingMode="Display" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -125,7 +144,7 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Root" Property="Background" Value="#1E293B" />
-                                <Setter TargetName="Root" Property="RenderTransform">
+                                <Setter TargetName="Root" Property="LayoutTransform">
                                     <Setter.Value>
                                         <ScaleTransform ScaleX="0.97" ScaleY="0.97" />
                                     </Setter.Value>
@@ -154,7 +173,6 @@
             <Setter Property="Foreground" Value="White" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Effect" Value="{StaticResource ButtonShadow}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -163,14 +181,18 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="8"
-                                Effect="{StaticResource ButtonShadow}"
+                                SnapsToDevicePixels="True"
+                                UseLayoutRounding="True"
                                 RenderTransformOrigin="0.5,0.5">
-                            <Border.RenderTransform>
+                            <Border.LayoutTransform>
                                 <ScaleTransform ScaleX="1" ScaleY="1" />
-                            </Border.RenderTransform>
+                            </Border.LayoutTransform>
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
-                                              Margin="{TemplateBinding Padding}" />
+                                              Margin="{TemplateBinding Padding}"
+                                              RecognizesAccessKey="True"
+                                              SnapsToDevicePixels="True"
+                                              TextOptions.TextFormattingMode="Display" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -192,7 +214,7 @@
                                         </LinearGradientBrush>
                                     </Setter.Value>
                                 </Setter>
-                                <Setter TargetName="Root" Property="RenderTransform">
+                                <Setter TargetName="Root" Property="LayoutTransform">
                                     <Setter.Value>
                                         <ScaleTransform ScaleX="0.97" ScaleY="0.97" />
                                     </Setter.Value>
@@ -200,7 +222,6 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5" />
-                                <Setter TargetName="Root" Property="Effect" Value="{x:Null}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -342,7 +363,7 @@
         <local:ColorToBrushConverter x:Key="ColorToBrushConverter" />
     </Window.Resources>
 
-    <Grid>
+    <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
@@ -431,7 +452,29 @@
                                      Text="点击启动加速后，将修改 hosts 文件以加速 GitHub 访问。"
                                      FontSize="11"
                                      Foreground="{StaticResource Text1Brush}"
-                                     TextWrapping="Wrap" />
+                                     TextWrapping="Wrap"
+                                   SnapsToDevicePixels="True"
+                                   TextOptions.TextFormattingMode="Display" />
+                           <ProgressBar x:Name="ProgressBar"
+                                        Height="4"
+                                        Margin="0,8,0,0"
+                                        Background="#1E293B"
+                                        Foreground="{StaticResource AccentBrush}"
+                                        BorderThickness="0"
+                                        Visibility="Collapsed"
+                                        IsIndeterminate="False"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        SnapsToDevicePixels="True"
+                                        UseLayoutRounding="True" />
+                           <TextBlock x:Name="ProgressText"
+                                      Margin="0,4,0,0"
+                                      FontSize="10"
+                                      Foreground="{StaticResource Text2Brush}"
+                                      TextWrapping="Wrap"
+                                      Visibility="Collapsed"
+                                      SnapsToDevicePixels="True"
+                                      TextOptions.TextFormattingMode="Display" />
                           <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                               <CheckBox x:Name="RestoreOnExitCheckBox"
                                         Content="退出时还原 hosts"
@@ -610,17 +653,42 @@
                                                                       BorderThickness="1"
                                                                       CornerRadius="6"
                                                                       Padding="10,6">
-                                                                  <StackPanel Orientation="Horizontal">
-                                                                      <TextBlock Text="{Binding Prefix}"
+                                                                  <Grid>
+                                                                      <Grid.ColumnDefinitions>
+                                                                          <ColumnDefinition Width="55" />
+                                                                          <ColumnDefinition Width="*" />
+                                                                          <ColumnDefinition Width="Auto" />
+                                                                      </Grid.ColumnDefinitions>
+                                                                      <TextBlock Grid.Column="0"
+                                                                                 Text="{Binding Prefix}"
                                                                                  FontSize="10"
                                                                                  Foreground="{StaticResource Text2Brush}"
-                                                                                 Width="55"
                                                                                  VerticalAlignment="Center" />
-                                                                      <TextBlock Text="{Binding Domain}"
+                                                                      <TextBlock Grid.Column="1"
+                                                                                 Text="{Binding Domain}"
                                                                                  FontSize="12"
                                                                                  Foreground="{StaticResource Text0Brush}"
                                                                                  VerticalAlignment="Center" />
-                                                                  </StackPanel>
+                                                                      <TextBlock Grid.Column="2"
+                                                                                 Text="{Binding CurrentIp}"
+                                                                                 FontSize="11"
+                                                                                 Foreground="{StaticResource AccentBrush}"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Margin="12,0,0,0">
+                                                                          <TextBlock.Style>
+                                                                              <Style TargetType="TextBlock">
+                                                                                  <Style.Triggers>
+                                                                                      <Trigger Property="Text" Value="">
+                                                                                          <Setter Property="Visibility" Value="Collapsed" />
+                                                                                      </Trigger>
+                                                                                      <Trigger Property="Text" Value="{x:Null}">
+                                                                                          <Setter Property="Visibility" Value="Collapsed" />
+                                                                                      </Trigger>
+                                                                                  </Style.Triggers>
+                                                                              </Style>
+                                                                          </TextBlock.Style>
+                                                                      </TextBlock>
+                                                                  </Grid>
                                                               </Border>
                                                          </DataTemplate>
                                                      </ItemsControl.ItemTemplate>
@@ -800,7 +868,7 @@
                            FontSize="11"
                            Foreground="{StaticResource Text2Brush}" />
                 <TextBlock DockPanel.Dock="Right"
-                           Text="仅 GitHub 网络加速服务"
+                           Text="GitHub / GitLab 网络加速"
                            VerticalAlignment="Center"
                            FontSize="11"
                            Foreground="{StaticResource Text2Brush}" />

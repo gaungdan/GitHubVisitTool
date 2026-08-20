@@ -12,7 +12,9 @@ public sealed class AppSettings
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public List<string> EnabledPlatforms { get; set; } = [];
+    readonly List<string> _enabledPlatforms = new();
+
+    public IReadOnlyList<string> EnabledPlatforms => _enabledPlatforms;
 
     public bool RestoreHostsOnExit { get; set; }
 
@@ -61,11 +63,9 @@ public sealed class AppSettings
 
     public void SetPlatformEnabled(string platformId, bool enabled)
     {
-        EnabledPlatforms = EnabledPlatforms
-            .Where(x => !x.Equals(platformId, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        _enabledPlatforms.RemoveAll(x => x.Equals(platformId, StringComparison.OrdinalIgnoreCase));
 
         if (enabled)
-            EnabledPlatforms.Add(platformId);
+            _enabledPlatforms.Add(platformId);
     }
 }

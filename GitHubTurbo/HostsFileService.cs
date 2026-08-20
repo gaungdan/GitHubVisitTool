@@ -8,6 +8,8 @@ public static class HostsFileService
     const string HostsPath = @"C:\Windows\System32\drivers\etc\hosts";
     const long MaxFileLength = 52428800;
 
+    static readonly Encoding NoBomUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
     internal const string LegacyMarkStart = "# GitHubTurbo Start";
     internal const string LegacyMarkEnd = "# GitHubTurbo End";
 
@@ -21,7 +23,7 @@ public static class HostsFileService
             if (!File.Exists(HostsPath))
                 return false;
 
-            var content = File.ReadAllText(HostsPath, Encoding.UTF8);
+            var content = File.ReadAllText(HostsPath, NoBomUtf8);
             return content.Contains(LegacyMarkEnd, StringComparison.OrdinalIgnoreCase) ||
                 PlatformProviders.All.Any(p => content.Contains(GetMarkerEnd(p.Descriptor.Id), StringComparison.OrdinalIgnoreCase));
         }
@@ -32,21 +34,21 @@ public static class HostsFileService
         if (!File.Exists(HostsPath))
             return false;
 
-        var content = File.ReadAllText(HostsPath, Encoding.UTF8);
+        var content = File.ReadAllText(HostsPath, NoBomUtf8);
         return content.Contains(GetMarkerStart(platformId), StringComparison.OrdinalIgnoreCase) ||
             content.Contains(GetMarkerEnd(platformId), StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool HasLegacyEntries =>
         File.Exists(HostsPath) &&
-        File.ReadAllText(HostsPath, Encoding.UTF8).Contains(LegacyMarkEnd, StringComparison.OrdinalIgnoreCase);
+        File.ReadAllText(HostsPath, NoBomUtf8).Contains(LegacyMarkEnd, StringComparison.OrdinalIgnoreCase);
 
     public static bool HasLoopbackEntries(string platformId)
     {
         if (!File.Exists(HostsPath))
             return false;
 
-        var lines = File.ReadAllLines(HostsPath, Encoding.UTF8);
+        var lines = File.ReadAllLines(HostsPath, NoBomUtf8);
         var markerStart = GetMarkerStart(platformId);
         var markerEnd = GetMarkerEnd(platformId);
         var inBlock = false;
@@ -84,7 +86,7 @@ public static class HostsFileService
         var markerEnd = GetMarkerEnd(platformId);
         var inBlock = false;
 
-        foreach (var line in File.ReadAllLines(HostsPath, Encoding.UTF8))
+        foreach (var line in File.ReadAllLines(HostsPath, NoBomUtf8))
         {
             var trimmed = line.Trim();
             if (trimmed.Equals(markerStart, StringComparison.OrdinalIgnoreCase))
@@ -107,6 +109,62 @@ public static class HostsFileService
         return dict;
     }
 
+    public static IReadOnlyList<HostsConflictEntry> FindConflictingEntries(IPlatformProvider provider)
+    {
+        var conflicts = new List<HostsConflictEntry>();
+        if (!File.Exists(HostsPath))
+            return conflicts;
+
+        var managedStarts = PlatformProviders.All
+            .Select(p => GetMarkerStart(p.Descriptor.Id))
+            .Append(LegacyMarkStart)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var managedEnds = PlatformProviders.All
+            .Select(p => GetMarkerEnd(p.Descriptor.Id))
+            .Append(LegacyMarkEnd)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var trackedDomains = provider.Domains
+            .Select(d => d.Domain)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var inManagedBlock = false;
+        var lineNumber = 0;
+        foreach (var line in File.ReadAllLines(HostsPath, NoBomUtf8))
+        {
+            lineNumber++;
+            var trimmed = line.Trim();
+            if (managedStarts.Contains(trimmed))
+            {
+                inManagedBlock = true;
+                continue;
+            }
+
+            if (managedEnds.Contains(trimmed))
+            {
+                inManagedBlock = false;
+                continue;
+            }
+
+            if (inManagedBlock || string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
+                continue;
+
+            var parts = trimmed.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+                continue;
+
+            var ip = parts[0];
+            foreach (var host in parts.Skip(1))
+            {
+                if (!trackedDomains.Contains(host))
+                    continue;
+
+                conflicts.Add(new HostsConflictEntry(host, ip, lineNumber, IpAddressHelpers.IsPrivateOrLoopback(ip)));
+            }
+        }
+
+        return conflicts;
+    }
+
     public static void EnsureDefaultHosts()
     {
         var fileInfo = new FileInfo(HostsPath);
@@ -114,7 +172,7 @@ public static class HostsFileService
             return;
 
         using var stream = fileInfo.Create();
-        using var writer = new StreamWriter(stream, Encoding.UTF8);
+        using var writer = new StreamWriter(stream, NoBomUtf8);
         writer.WriteLine("# Copyright (c) 1993-2009 Microsoft Corp.");
         writer.WriteLine("#");
         writer.WriteLine("# This is a sample HOSTS file used by Microsoft TCP/IP for Windows.");
@@ -191,7 +249,7 @@ public static class HostsFileService
                 if (!currentBackup.Success)
                     return currentBackup;
 
-                ReplaceHostsAtomically(File.ReadAllLines(latest, Encoding.UTF8));
+                ReplaceHostsAtomically(File.ReadAllLines(latest, NoBomUtf8));
                 var flush = FlushDnsCache();
                 return flush.Success
                     ? HostsOperationResult.Ok($"已从 {latest} 恢复 hosts。", latest)
@@ -240,7 +298,7 @@ public static class HostsFileService
 
             try
             {
-                var existing = File.ReadAllLines(HostsPath, Encoding.UTF8);
+                var existing = File.ReadAllLines(HostsPath, NoBomUtf8);
                 var updated = mutate(existing);
                 var backup = BackupHosts();
                 if (!backup.Success)
@@ -406,7 +464,7 @@ public static class HostsFileService
 
         try
         {
-            File.WriteAllLines(tempPath, lines, Encoding.UTF8);
+            File.WriteAllLines(tempPath, lines, NoBomUtf8);
             if (File.Exists(HostsPath))
                 File.Replace(tempPath, HostsPath, null, ignoreMetadataErrors: true);
             else
@@ -455,6 +513,7 @@ public static class HostsFileService
             return HostsOperationResult.Fail(ex.Message);
         }
     }
+
 }
 
 public sealed record HostsOperationResult(bool Success, string Message, string? Path = null)
@@ -463,3 +522,5 @@ public sealed record HostsOperationResult(bool Success, string Message, string? 
 
     public static HostsOperationResult Fail(string message, string? path = null) => new(false, message, path);
 }
+
+public sealed record HostsConflictEntry(string Domain, string Ip, int LineNumber, bool IsLoopbackOrPrivate);

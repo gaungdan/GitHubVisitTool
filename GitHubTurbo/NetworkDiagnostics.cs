@@ -9,18 +9,26 @@ namespace GitHubTurbo;
 public static class NetworkDiagnostics
 {
     public static Task<DiagnosticResult> CheckHostAsync(string host, CancellationToken cancellationToken)
-        => CheckEndpointAsync(host, host, cancellationToken);
+        => CheckEndpointAsync(host, host, includeHttpProbe: true, TimeSpan.FromSeconds(4), cancellationToken);
 
     public static Task<DiagnosticResult> CheckIpForHostAsync(string host, string ip, CancellationToken cancellationToken)
-        => CheckEndpointAsync(host, ip, cancellationToken);
+        => CheckEndpointAsync(host, ip, includeHttpProbe: true, TimeSpan.FromSeconds(4), cancellationToken);
 
-    static async Task<DiagnosticResult> CheckEndpointAsync(string host, string connectTarget, CancellationToken cancellationToken)
+    public static Task<DiagnosticResult> CheckTlsAsync(string host, string ip, CancellationToken cancellationToken)
+        => CheckEndpointAsync(host, ip, includeHttpProbe: false, TimeSpan.FromMilliseconds(1500), cancellationToken);
+
+    static async Task<DiagnosticResult> CheckEndpointAsync(
+        string host,
+        string connectTarget,
+        bool includeHttpProbe,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
     {
         var watch = Stopwatch.StartNew();
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(4));
+            timeoutCts.CancelAfter(timeout);
 
             using var client = new TcpClient { NoDelay = true };
             if (IPAddress.TryParse(connectTarget, out var address))
@@ -30,6 +38,12 @@ public static class NetworkDiagnostics
 
             await using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
             await ssl.AuthenticateAsClientAsync(host).WaitAsync(timeoutCts.Token);
+
+            if (!includeHttpProbe)
+            {
+                watch.Stop();
+                return new DiagnosticResult(true, $"{watch.ElapsedMilliseconds} ms", $"{host} TLS 连接成功。", watch.ElapsedMilliseconds);
+            }
 
             var requestBytes = Encoding.ASCII.GetBytes(
                 $"HEAD / HTTP/1.1\r\nHost: {host}\r\nUser-Agent: GitHubTurbo/1.0\r\nConnection: close\r\n\r\n");
@@ -44,10 +58,10 @@ public static class NetworkDiagnostics
             {
                 var response = Encoding.ASCII.GetString(buffer, 0, read);
                 var statusLine = response.Split('\r')[0];
-                return new DiagnosticResult(true, $"{watch.ElapsedMilliseconds} ms", $"{host} {statusLine}");
+                return new DiagnosticResult(true, $"{watch.ElapsedMilliseconds} ms", $"{host} {statusLine}", watch.ElapsedMilliseconds);
             }
 
-            return new DiagnosticResult(true, $"{watch.ElapsedMilliseconds} ms", $"{host} TLS 连接成功。");
+            return new DiagnosticResult(true, $"{watch.ElapsedMilliseconds} ms", $"{host} TLS 连接成功。", watch.ElapsedMilliseconds);
         }
         catch (OperationCanceledException)
         {
@@ -72,4 +86,4 @@ public static class NetworkDiagnostics
     }
 }
 
-public sealed record DiagnosticResult(bool Success, string Latency, string Detail);
+public sealed record DiagnosticResult(bool Success, string Latency, string Detail, long? ElapsedMilliseconds = null);
