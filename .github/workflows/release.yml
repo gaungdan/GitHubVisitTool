@@ -1,0 +1,91 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - release
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore GitHubTurbo/GitHubTurbo.csproj
+
+      - name: Publish (win-x64 self-contained single-file)
+        run: >
+          dotnet publish GitHubTurbo/GitHubTurbo.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GitHubTurbo-win-x64
+          path: publish/GitHubTurbo.exe
+
+  release:
+    needs: build
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: GitHubTurbo-win-x64
+          path: publish
+
+      - name: Determine release name
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "tag_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "title=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            echo "tag_name=v0.0.0-${SHORT_SHA}" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "title=Pre-release (${SHORT_SHA})" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag_name }}
+          name: ${{ steps.meta.outputs.title }}
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          body: |
+            ## GitHub Turbo
+
+            ### 使用方法
+            1. 下载 `GitHubTurbo.exe`
+            2. 右键 → **以管理员身份运行**（修改 hosts 文件需要管理员权限）
+            3. 点击「启动加速」即可
+
+            ### 系统要求
+            - Windows 10/11 (x64)
+            - 无需安装 .NET Runtime（已内嵌）
+          files: publish/GitHubTurbo.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
