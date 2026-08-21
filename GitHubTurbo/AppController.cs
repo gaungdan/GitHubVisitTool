@@ -7,11 +7,14 @@ namespace GitHubTurbo;
 
 public sealed class AppController : IDisposable
 {
-    static readonly SemaphoreSlim HostsFileLock = new(1, 1);
-    static readonly SemaphoreSlim IpProbeGate = new(16, 16);
-    static readonly SemaphoreSlim DnsResolutionGate = new(8, 8);
+    internal static readonly SemaphoreSlim HostsFileLock = new(1, 1);
+    internal static readonly SemaphoreSlim IpProbeGate = new(16, 16);
+    internal static readonly SemaphoreSlim DnsResolutionGate = new(16, 16);
     static readonly HttpClient DohClient = new() { Timeout = TimeSpan.FromSeconds(4) };
+    static Task<IReadOnlyList<CommunityIpEntry>>? _communityCacheTask;
+    static readonly object _communityCacheLock = new();
     readonly Dictionary<string, TurboStatus> platformStatuses = new();
+    IpRefreshService _refreshService = null!;
     AppSettings settings = new();
 
     public IReadOnlyDictionary<string, TurboStatus> PlatformStatuses => platformStatuses;
@@ -22,12 +25,11 @@ public sealed class AppController : IDisposable
 
     public bool AnyRunning => platformStatuses.Values.Any(s => s.IsRunning);
 
-    public bool RestoreHostsOnExit => settings.RestoreHostsOnExit;
-
     public async Task InitializeAsync()
     {
         AppPaths.EnsureDirectories();
         settings = await AppSettings.LoadAsync();
+        _refreshService = new IpRefreshService();
         await AppLogger.InfoAsync("GitHub Turbo started.");
 
         foreach (var provider in PlatformProviders.All)
@@ -207,43 +209,6 @@ public sealed class AppController : IDisposable
         await Task.WhenAll(tasks);
     }
 
-    public async Task<HostsOperationResult> BackupHostsAsync()
-    {
-        await HostsFileLock.WaitAsync();
-        try
-        {
-            var result = HostsFileService.BackupHosts();
-            await AppLogger.InfoAsync($"Backup hosts: {result.Message}");
-            return result;
-        }
-        finally
-        {
-            HostsFileLock.Release();
-        }
-    }
-
-    public async Task<HostsOperationResult> RestoreLatestBackupAsync()
-    {
-        await HostsFileLock.WaitAsync();
-        try
-        {
-            var result = HostsFileService.RestoreLatestBackup();
-            await AppLogger.InfoAsync($"Restore hosts backup: {result.Message}");
-            RefreshPlatformStatusesFromHosts();
-            return result;
-        }
-        finally
-        {
-            HostsFileLock.Release();
-        }
-    }
-
-    public async Task SetRestoreHostsOnExitAsync(bool value)
-    {
-        settings.RestoreHostsOnExit = value;
-        await settings.SaveAsync();
-    }
-
     public async Task SetAutoRefreshOnLaunchAsync(bool value)
     {
         settings.AutoRefreshOnLaunch = value;
@@ -353,22 +318,24 @@ public sealed class AppController : IDisposable
         return dict;
     }
 
-    static async Task<IpSelectionResult?> SelectBestIpAsync(string domain, string? previousIp)
+    internal static async Task<IpSelectionResult?> SelectBestIpAsync(string domain, string? previousIp)
     {
         var candidates = await ResolveCandidatesAsync(domain, previousIp);
         if (candidates.Count == 0)
         {
-            await AppLogger.ErrorAsync($"DNS resolve failed for {domain}: no public IPv4 candidates");
+            await AppLogger.ErrorAsync($"DNS resolve failed for {domain}: no public IP candidates");
             return null;
         }
 
-        var probes = candidates.Take(8).Select(async candidate =>
+        // Multi-dimensional scoring: ping + TCP + HTTP response.
+        // Candidates are probed concurrently (bounded by IpProbeGate) so that
+        // one bad candidate cannot serialize the whole domain behind its timeouts.
+        var tasks = candidates.Take(5).Select(async candidate =>
         {
             await IpProbeGate.WaitAsync();
             try
             {
-                var diagnostic = await NetworkDiagnostics.CheckTlsAsync(domain, candidate.Ip, CancellationToken.None);
-                return new IpProbeResult(candidate, diagnostic);
+                return await IpScoringService.ScoreIpAsync(domain, candidate.Ip);
             }
             finally
             {
@@ -376,74 +343,57 @@ public sealed class AppController : IDisposable
             }
         });
 
-        var quickResults = await Task.WhenAll(probes);
-        var finalists = quickResults
-            .Where(x => x.Diagnostic.Success)
-            .OrderBy(x => x.Diagnostic.ElapsedMilliseconds ?? long.MaxValue)
-            .Take(3)
-            .Select(x => x.Candidate)
-            .ToArray();
+        var probed = await Task.WhenAll(tasks);
+        var scores = probed.Where(s => s.IsReachable).ToList();
 
-        if (finalists.Length == 0)
+        if (scores.Count == 0)
         {
             await AppLogger.ErrorAsync($"No reachable IP for {domain}. Candidates: {string.Join(", ", candidates.Select(x => x.Ip))}");
             return null;
         }
 
-        var finalResults = await Task.WhenAll(finalists.Select(candidate => ProbeFinalistAsync(domain, candidate)));
-        var best = finalResults
-            .Where(x => x.SuccessCount > 0)
-            .OrderByDescending(x => x.SuccessCount)
-            .ThenBy(x => x.MedianLatencyMs)
-            .FirstOrDefault();
+        // Pick best by composite score, prefer existing IP if close
+        var ranked = scores.OrderByDescending(s => s.CompositeScore).ToList();
+        var best = ranked.First();
 
-        if (best is null)
+        // Hysteresis: keep existing IP if it's within 80% of best score
+        if (previousIp is not null)
         {
-            await AppLogger.ErrorAsync($"No stable IP for {domain}. Finalists: {string.Join(", ", finalists.Select(x => x.Ip))}");
-            return null;
-        }
-
-        await AppLogger.InfoAsync($"Selected {best.Candidate.Ip} for {domain} via {best.Candidate.Source}, median {best.MedianLatencyMs} ms, success {best.SuccessCount}/2.");
-        return new IpSelectionResult(domain, best.Candidate.Ip, best.Candidate.Source, $"{best.MedianLatencyMs} ms");
-    }
-
-    static async Task<FinalIpProbeResult> ProbeFinalistAsync(string domain, ResolvedIpCandidate candidate)
-    {
-        var results = new List<DiagnosticResult>(2);
-        for (var attempt = 0; attempt < 2; attempt++)
-        {
-            await IpProbeGate.WaitAsync();
-            try
+            var existing = ranked.FirstOrDefault(s => s.Ip == previousIp);
+            if (existing is not null && existing.CompositeScore >= best.CompositeScore * 0.8)
             {
-                results.Add(await NetworkDiagnostics.CheckIpForHostAsync(domain, candidate.Ip, CancellationToken.None));
-            }
-            finally
-            {
-                IpProbeGate.Release();
+                best = existing;
             }
         }
 
-        var successfulLatencies = results
-            .Where(x => x.Success && x.ElapsedMilliseconds.HasValue)
-            .Select(x => x.ElapsedMilliseconds!.Value)
-            .ToArray();
-        return new FinalIpProbeResult(candidate, successfulLatencies.Length, IpSelectionHelpers.Median(successfulLatencies));
+        await AppLogger.InfoAsync($"Selected {best.Ip} for {domain} (score {best.CompositeScore:F1}/100) | {best.Summary}");
+        return new IpSelectionResult(domain, best.Ip, ranked.First().Ip == best.Ip ? "Multi-dim best" : "Multi-dim (kept existing)", $"{best.CompositeScore:F0}");
     }
 
-    static async Task<IReadOnlyList<ResolvedIpCandidate>> ResolveCandidatesAsync(string domain, string? previousIp)
+    internal static async Task<IReadOnlyList<ResolvedIpCandidate>> ResolveCandidatesAsync(string domain, string? previousIp)
     {
         await DnsResolutionGate.WaitAsync();
         try
         {
+            // 1. Community IP library (crowd-validated, updated frequently)
+            var communityIps = await ResolveViaCommunityAsync(domain);
+
+            // 2. Local DNS resolution (system DNS + DoH)
             var sourceTasks = new List<Task<IReadOnlyList<ResolvedIpCandidate>>>
             {
                 ResolveViaSystemDnsAsync(domain),
             };
             sourceTasks.AddRange(DohEndpoints.Select(endpoint => ResolveViaDohSourceAsync(domain, endpoint)));
-
             var sourceResults = (await Task.WhenAll(sourceTasks)).ToList();
-            if (!string.IsNullOrWhiteSpace(previousIp) && IPAddress.TryParse(previousIp, out var address) && IsUsablePublicIpv4(address))
+
+            // 3. Previous IP (hysteresis: keep working IPs)
+            if (!string.IsNullOrWhiteSpace(previousIp) && IPAddress.TryParse(previousIp, out var address)
+                && (IpAddressHelpers.IsUsablePublicIpv4(address) || IsUsablePublicIpv6(address)))
                 sourceResults.Insert(0, [new ResolvedIpCandidate(previousIp, "Existing hosts")]);
+
+            // 4. Community IPs get priority as they're crowd-validated
+            if (communityIps.Count > 0)
+                sourceResults.Insert(0, communityIps);
 
             return IpSelectionHelpers.Interleave(sourceResults, 8);
         }
@@ -453,15 +403,79 @@ public sealed class AppController : IDisposable
         }
     }
 
+    static async Task<IReadOnlyList<ResolvedIpCandidate>> ResolveViaCommunityAsync(string domain)
+    {
+        try
+        {
+            var entries = await GetCommunityIpsCachedAsync();
+            return entries
+                .Where(e => e.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase))
+                .Select(e => new ResolvedIpCandidate(e.Ip, $"Community ({e.Source})"))
+                .DistinctBy(x => x.Ip, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            await AppLogger.ErrorAsync($"Community IP fetch failed for {domain}: {ex.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Community IP list is fetched at most once per process (cached as a shared task).
+    /// Previously every domain triggered a full hosts-file download (10s timeout),
+    /// which dominated DNS phase wall time with 24+ concurrent fetches.
+    /// </summary>
+    static Task<IReadOnlyList<CommunityIpEntry>> GetCommunityIpsCachedAsync()
+    {
+        var cached = _communityCacheTask;
+        if (cached is not null)
+            return cached;
+
+        lock (_communityCacheLock)
+        {
+            cached = _communityCacheTask;
+            if (cached is not null)
+                return cached;
+
+            // Fetch the full list once for all domains the app manages, then cache the task.
+            var allDomains = PlatformProviders.All
+                .SelectMany(p => p.Domains.Select(d => d.Domain))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _communityCacheTask = FetchAndCacheAsync(allDomains);
+            return _communityCacheTask;
+        }
+    }
+
+    static async Task<IReadOnlyList<CommunityIpEntry>> FetchAndCacheAsync(HashSet<string> allDomains)
+    {
+        IReadOnlyList<CommunityIpEntry> fetched;
+        try
+        {
+            fetched = await CommunityIpService.FetchGitHubIpsAsync(allDomains);
+        }
+        catch
+        {
+            // Clear the cached task so a later attempt can retry instead of being permanently stuck.
+            lock (_communityCacheLock)
+            {
+                _communityCacheTask = null;
+            }
+            return [];
+        }
+        return fetched;
+    }
+
     static async Task<IReadOnlyList<ResolvedIpCandidate>> ResolveViaSystemDnsAsync(string domain)
     {
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
             var addresses = await Dns.GetHostAddressesAsync(domain, cts.Token);
             return addresses
-                .Where(IsUsablePublicIpv4)
-                .Select(address => new ResolvedIpCandidate(address.ToString(), "System DNS"))
+                .Where(a => IpAddressHelpers.IsUsablePublicIpv4(a) || IsUsablePublicIpv6(a))
+                .Select(address => new ResolvedIpCandidate(address.ToString(),
+                    address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? "System DNS (IPv6)" : "System DNS"))
                 .DistinctBy(x => x.Ip, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
@@ -472,11 +486,21 @@ public sealed class AppController : IDisposable
         }
     }
 
+    static bool IsUsablePublicIpv6(IPAddress address)
+    {
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6) return false;
+        if (address.IsIPv6LinkLocal || address.IsIPv6SiteLocal) return false;
+        if (address.Equals(IPAddress.IPv6Loopback)) return false;
+        var bytes = address.GetAddressBytes();
+        if (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0d && bytes[3] == 0xb8) return false;
+        return true;
+    }
+
     static async Task<IReadOnlyList<ResolvedIpCandidate>> ResolveViaDohSourceAsync(string domain, DohEndpoint endpoint)
     {
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
             var ips = await ResolveViaDohAsync(domain, endpoint.Template, cts.Token);
             return ips.Select(ip => new ResolvedIpCandidate(ip, endpoint.Name)).ToArray();
         }
@@ -490,7 +514,9 @@ public sealed class AppController : IDisposable
     static readonly DohEndpoint[] DohEndpoints =
     [
         new("Cloudflare DoH", "https://cloudflare-dns.com/dns-query?name={0}&type=A"),
+        new("Cloudflare DoH (AAAA)", "https://cloudflare-dns.com/dns-query?name={0}&type=AAAA"),
         new("Google DoH", "https://dns.google/resolve?name={0}&type=A"),
+        new("Google DoH (AAAA)", "https://dns.google/resolve?name={0}&type=AAAA"),
         new("Tencent DoH", "https://doh.pub/dns-query?name={0}&type=A"),
     ];
 
@@ -509,12 +535,12 @@ public sealed class AppController : IDisposable
         {
             foreach (var answer in answers.EnumerateArray())
             {
-                if (answer.TryGetProperty("type", out var type) && type.GetInt32() == 1 &&
+                if (answer.TryGetProperty("type", out var type) && (type.GetInt32() == 1 || type.GetInt32() == 28) &&
                     answer.TryGetProperty("data", out var data))
                 {
                     var ip = data.GetString();
                     if (!string.IsNullOrEmpty(ip) && IPAddress.TryParse(ip, out var addr) &&
-                        IsUsablePublicIpv4(addr))
+                        (IsUsablePublicIpv4(addr) || IsUsablePublicIpv6(addr)))
                         ips.Add(ip);
                 }
             }
@@ -579,6 +605,7 @@ public sealed class AppController : IDisposable
 
     public void Dispose()
     {
+        _refreshService.Dispose();
         HostsFileLock.Dispose();
     }
 }
@@ -595,10 +622,6 @@ public sealed record PlatformStatusChangedEventArgs(string PlatformId, TurboStat
 sealed record DohEndpoint(string Name, string Template);
 
 public sealed record ResolvedIpCandidate(string Ip, string Source);
-
-sealed record IpProbeResult(ResolvedIpCandidate Candidate, DiagnosticResult Diagnostic);
-
-sealed record FinalIpProbeResult(ResolvedIpCandidate Candidate, int SuccessCount, long MedianLatencyMs);
 
 sealed record IpSelectionResult(string Domain, string Ip, string Source, string Latency);
 

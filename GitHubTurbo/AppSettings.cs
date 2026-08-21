@@ -16,8 +16,6 @@ public sealed class AppSettings
 
     public IReadOnlyList<string> EnabledPlatforms => _enabledPlatforms;
 
-    public bool RestoreHostsOnExit { get; set; }
-
     public bool AutoRefreshOnLaunch { get; set; }
 
     public static async Task<AppSettings> LoadAsync()

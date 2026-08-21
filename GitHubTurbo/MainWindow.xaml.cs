@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace GitHubTurbo;
 
@@ -17,6 +18,7 @@ public partial class MainWindow : Window
     readonly SolidColorBrush _stoppedBrush;
     readonly System.Windows.Media.Effects.DropShadowEffect _runningEffect;
     readonly System.Windows.Media.Effects.DropShadowEffect _stoppedEffect;
+    Storyboard? _pulseStoryboard;
 
     public ObservableCollection<PlatformModuleViewModel> PlatformModules { get; } = new();
     public ObservableCollection<DomainDiagnosticViewModel> DomainTests { get; } = new();
@@ -45,7 +47,6 @@ public partial class MainWindow : Window
             Opacity = 0.3,
         };
         isApplyingSettings = true;
-        RestoreOnExitCheckBox.IsChecked = controller.Settings.RestoreHostsOnExit;
         AutoRefreshOnLaunchCheckBox.IsChecked = controller.Settings.AutoRefreshOnLaunch;
         isApplyingSettings = false;
 
@@ -141,38 +142,6 @@ public partial class MainWindow : Window
         });
     }
 
-    async void BackupHostsButton_Click(object sender, RoutedEventArgs e)
-    {
-        var result = await controller.BackupHostsAsync();
-        System.Windows.MessageBox.Show(result.Message, "hosts 备份", MessageBoxButton.OK,
-            result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
-    }
-
-    async void RestoreHostsButton_Click(object sender, RoutedEventArgs e)
-    {
-        var confirm = System.Windows.MessageBox.Show(
-            "将使用最近一次备份覆盖当前 hosts 文件，是否继续？",
-            "恢复 hosts",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
-            return;
-
-        var result = await controller.RestoreLatestBackupAsync();
-        System.Windows.MessageBox.Show(result.Message, "恢复 hosts", MessageBoxButton.OK,
-            result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
-        if (activePlatformId is not null)
-            RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId) ?? TurboStatus.Stopped);
-    }
-
-    async void RestoreOnExitCheckBox_Changed(object sender, RoutedEventArgs e)
-    {
-        if (isApplyingSettings)
-            return;
-
-        await controller.SetRestoreHostsOnExitAsync(RestoreOnExitCheckBox.IsChecked == true);
-    }
-
     async void AutoRefreshOnLaunchCheckBox_Changed(object sender, RoutedEventArgs e)
     {
         if (isApplyingSettings)
@@ -188,7 +157,31 @@ public partial class MainWindow : Window
         WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     }
 
-    void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+    async void CloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (controller.AnyRunning)
+        {
+            var confirm = System.Windows.MessageBox.Show(
+                "检测到加速正在运行，是否停止加速？",
+                "关闭",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Question);
+
+            if (confirm == MessageBoxResult.Cancel)
+                return;
+
+            if (confirm == MessageBoxResult.Yes)
+            {
+                await controller.StopAllAsync();
+                RefreshAllHostsIps();
+                if (activePlatformId is not null)
+                    RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId) ?? TurboStatus.Stopped);
+            }
+        }
+
+        WindowState = WindowState.Minimized;
+        Hide();
+    }
 
     void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -334,13 +327,30 @@ public partial class MainWindow : Window
         {
             StatusIndicator.Fill = _runningBrush;
             StatusIndicator.Effect = _runningEffect;
+            StartPulseAnimation();
         }
         else
         {
             StatusIndicator.Fill = _stoppedBrush;
             StatusIndicator.Effect = _stoppedEffect;
+            StopPulseAnimation();
         }
         StartButton.IsEnabled = !status.IsRunning;
         StopButton.IsEnabled = status.IsRunning;
+    }
+
+    void StartPulseAnimation()
+    {
+        if (_pulseStoryboard is not null) return;
+        _pulseStoryboard = (Storyboard)FindResource("StatusPulseAnimation");
+        Storyboard.SetTarget(_pulseStoryboard, StatusIndicator);
+        _pulseStoryboard.Begin();
+    }
+
+    void StopPulseAnimation()
+    {
+        if (_pulseStoryboard is null) return;
+        _pulseStoryboard.Stop();
+        _pulseStoryboard = null;
     }
 }

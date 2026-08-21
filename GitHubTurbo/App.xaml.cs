@@ -55,7 +55,7 @@ public partial class App : System.Windows.Application
         menu.Items.Add("启动全部加速", null, async (_, _) => await controller!.StartAllAsync());
         menu.Items.Add("停止全部加速", null, async (_, _) => await controller!.StopAllAsync());
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => Shutdown());
+        menu.Items.Add("退出", null, (_, _) => Exit());
 
         trayIcon = new Forms.NotifyIcon
         {
@@ -76,7 +76,7 @@ public partial class App : System.Windows.Application
         mainWindow.Activate();
     }
 
-    new void Shutdown()
+    public new void Exit()
     {
         _isShuttingDown = true;
         mainWindow?.Close();
@@ -85,15 +85,6 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        try
-        {
-            if (controller?.RestoreHostsOnExit == true)
-            {
-                controller.StopAllAsync().GetAwaiter().GetResult();
-                HostsFileService.RemoveAllHosts();
-            }
-        }
-        catch { }
         if (trayIcon is not null)
         {
             trayIcon.Visible = false;

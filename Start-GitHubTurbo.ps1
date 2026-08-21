@@ -61,12 +61,12 @@ Write-Host "Project: $project"
 
 if (-not $NoBuild) {
     Write-Host "Building $Configuration..."
-    & $dotnet build $project -c $Configuration
+    & $dotnet build $project -c $Configuration -r win-x64
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed with exit code $LASTEXITCODE."
     }
 }
 
 Write-Host 'Starting GitHub Turbo...'
-& $dotnet run --project $project -c $Configuration --no-build
+& $dotnet run --project $project -c $Configuration -r win-x64 --no-build
 exit $LASTEXITCODE

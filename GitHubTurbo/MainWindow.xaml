@@ -56,15 +56,17 @@
         <SolidColorBrush x:Key="BadBrush" Color="{StaticResource Bad}" />
         <SolidColorBrush x:Key="BadLightBrush" Color="{StaticResource BadLight}" />
 
-        <!-- Drop Shadow (reduced blur for crispness) -->
-        <DropShadowEffect x:Key="CardShadow" ShadowDepth="1" BlurRadius="4" Opacity="0.06" Color="#1E293B" />
-        <DropShadowEffect x:Key="HeaderShadow" ShadowDepth="1" BlurRadius="3" Opacity="0.04" Color="#1E293B" />
+        <!-- Drop Shadow -->
+        <DropShadowEffect x:Key="CardShadow" ShadowDepth="1" BlurRadius="6" Opacity="0.08" Color="#000000" />
+        <DropShadowEffect x:Key="HeaderShadow" ShadowDepth="1" BlurRadius="4" Opacity="0.06" Color="#000000" />
 
+        <!-- ============================================ -->
         <!-- Window Control Buttons -->
+        <!-- ============================================ -->
         <Style x:Key="WindowButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="36" />
+            <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="28" />
-            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Margin" Value="0,0,2,0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{StaticResource Text2Brush}" />
             <Setter Property="BorderThickness" Value="0" />
@@ -102,17 +104,19 @@
             </Setter>
         </Style>
 
-        <!-- Toolbar Buttons -->
+        <!-- ============================================ -->
+        <!-- Toolbar Buttons (Secondary) -->
+        <!-- ============================================ -->
         <Style x:Key="ToolbarButtonStyle" TargetType="Button">
-            <Setter Property="Height" Value="36" />
-            <Setter Property="Padding" Value="16,0" />
-            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Margin" Value="0,0,6,0" />
             <Setter Property="Foreground" Value="{StaticResource Text1Brush}" />
             <Setter Property="Background" Value="{StaticResource Bg1Brush}" />
             <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="SnapsToDevicePixels" Value="True" />
             <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
             <Setter Property="TextOptions.TextHintingMode" Value="Auto" />
@@ -123,7 +127,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8"
+                                CornerRadius="7"
                                 SnapsToDevicePixels="True"
                                 UseLayoutRounding="True"
                                 RenderTransformOrigin="0.5,0.5">
@@ -151,7 +155,7 @@
                                 </Setter>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4" />
+                                <Setter Property="Opacity" Value="0.35" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -159,7 +163,9 @@
             </Setter>
         </Style>
 
-        <!-- Primary Button -->
+        <!-- ============================================ -->
+        <!-- Primary Button (Accent) -->
+        <!-- ============================================ -->
         <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarButtonStyle}">
             <Setter Property="Background">
                 <Setter.Value>
@@ -171,7 +177,7 @@
             </Setter>
             <Setter Property="BorderBrush" Value="#1D4ED8" />
             <Setter Property="Foreground" Value="White" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -180,7 +186,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8"
+                                CornerRadius="7"
                                 SnapsToDevicePixels="True"
                                 UseLayoutRounding="True"
                                 RenderTransformOrigin="0.5,0.5">
@@ -221,7 +227,7 @@
                                 </Setter>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5" />
+                                <Setter Property="Opacity" Value="0.45" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -230,38 +236,46 @@
         </Style>
 
         <Style x:Key="CompactPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
-            <Setter Property="Height" Value="32" />
-            <Setter Property="MinWidth" Value="96" />
-            <Setter Property="Padding" Value="14,0" />
-            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="88" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="FontSize" Value="11" />
             <Setter Property="Margin" Value="0" />
         </Style>
 
+        <!-- ============================================ -->
         <!-- Section Panel -->
+        <!-- ============================================ -->
         <Style x:Key="SectionPanelStyle" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource Bg1Brush}" />
             <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="CornerRadius" Value="10" />
         </Style>
 
+        <!-- ============================================ -->
         <!-- Chip Style -->
+        <!-- ============================================ -->
         <Style x:Key="ChipStyle" TargetType="Border">
-            <Setter Property="CornerRadius" Value="14" />
-            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="10,4" />
         </Style>
 
-        <!-- Status Indicator Glow Animation -->
-        <Storyboard x:Key="StatusGlowAnimation">
+        <!-- ============================================ -->
+        <!-- Status Indicator Pulse Animation -->
+        <!-- ============================================ -->
+        <Storyboard x:Key="StatusPulseAnimation">
             <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                             From="1" To="0.4" Duration="0:0:0.8"
+                             From="1" To="0.5" Duration="0:0:1"
                              AutoReverse="True" RepeatBehavior="Forever" />
             <DoubleAnimation Storyboard.TargetProperty="(Effect).(DropShadowEffect.BlurRadius)"
-                             From="8" To="16" Duration="0:0:0.8"
+                             From="8" To="14" Duration="0:0:1"
                              AutoReverse="True" RepeatBehavior="Forever" />
         </Storyboard>
 
+        <!-- ============================================ -->
         <!-- Expander Style -->
+        <!-- ============================================ -->
         <Style x:Key="ModernExpanderStyle" TargetType="Expander">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -271,8 +285,8 @@
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{StaticResource LineBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
-                                Margin="0,0,0,10">
+                                CornerRadius="10"
+                                Margin="0,0,0,8">
                             <DockPanel>
                                 <ToggleButton x:Name="HeaderSite"
                                               DockPanel.Dock="Top"
@@ -285,7 +299,7 @@
                                             <Border x:Name="HeaderBorder"
                                                     Background="{TemplateBinding Background}"
                                                     Padding="0"
-                                                    CornerRadius="12">
+                                                    CornerRadius="10">
                                                 <ContentPresenter ContentSource="Content" />
                                             </Border>
                                             <ControlTemplate.Triggers>
@@ -300,8 +314,8 @@
                                 <Border x:Name="ExpandSite"
                                         Visibility="Collapsed"
                                         Background="#1E293B"
-                                        CornerRadius="0,0,12,12"
-                                        Padding="20,16">
+                                        CornerRadius="0,0,10,10"
+                                        Padding="16,12">
                                     <ContentPresenter />
                                 </Border>
                             </DockPanel>
@@ -316,7 +330,9 @@
             </Setter>
         </Style>
 
+        <!-- ============================================ -->
         <!-- Tab Control Style -->
+        <!-- ============================================ -->
         <Style x:Key="ModernTabControlStyle" TargetType="TabControl">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -326,9 +342,9 @@
         <Style x:Key="ModernTabItemStyle" TargetType="TabItem">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{StaticResource Text2Brush}" />
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="Medium" />
-            <Setter Property="Padding" Value="20,10" />
+            <Setter Property="Padding" Value="16,8" />
             <Setter Property="Margin" Value="0,0,4,0" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -365,17 +381,19 @@
 
     <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
         <Grid.RowDefinitions>
-            <RowDefinition Height="48" />
+            <RowDefinition Height="44" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="32" />
+            <RowDefinition Height="28" />
         </Grid.RowDefinitions>
 
+        <!-- ============================================ -->
         <!-- Title Bar -->
+        <!-- ============================================ -->
         <Border Background="{StaticResource Bg1Brush}"
                 BorderBrush="{StaticResource LineBrush}"
                 BorderThickness="0,0,0,1"
                 Effect="{StaticResource HeaderShadow}">
-            <Grid Margin="18,0,14,0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid Margin="16,0,12,0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -383,10 +401,10 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="⚡" FontSize="18" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <TextBlock Text="⚡" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0" Opacity="0.9" />
                     <TextBlock Text="GitHub Turbo"
                                VerticalAlignment="Center"
-                               FontSize="14"
+                               FontSize="13"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource Text0Brush}" />
                 </StackPanel>
@@ -405,10 +423,12 @@
             </Grid>
         </Border>
 
+        <!-- ============================================ -->
         <!-- Main Content -->
+        <!-- ============================================ -->
         <Grid Grid.Row="1" Background="{StaticResource Bg0Brush}">
             <Grid.RowDefinitions>
-                <RowDefinition Height="110" />
+                <RowDefinition Height="104" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -416,7 +436,7 @@
             <Border Background="{StaticResource Bg1Brush}"
                     BorderBrush="{StaticResource LineBrush}"
                     BorderThickness="0,0,0,1">
-                <Grid Margin="24,16,24,16">
+                <Grid Margin="20,14,20,14">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -424,138 +444,121 @@
 
                     <!-- Info -->
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                             <!-- Status Badge -->
-                             <Border Style="{StaticResource ChipStyle}"
-                                     Background="{StaticResource AccentLightBrush}"
-                                     BorderBrush="#1E3A5F"
-                                     BorderThickness="1">
-                                 <StackPanel Orientation="Horizontal">
-                                     <Ellipse x:Name="StatusIndicator"
-                                              Width="7" Height="7"
-                                              Fill="{StaticResource Text2Brush}"
-                                              VerticalAlignment="Center">
-                                         <Ellipse.Effect>
-                                             <DropShadowEffect ShadowDepth="0" BlurRadius="8" Color="{StaticResource Text2}" Opacity="0.5" />
-                                         </Ellipse.Effect>
-                                     </Ellipse>
-                                     <TextBlock x:Name="StatusTitleText"
-                                                Text="未启动"
-                                                Margin="6,0,0,0"
-                                                FontSize="11"
-                                                FontWeight="SemiBold"
-                                                Foreground="{StaticResource Text0Brush}" />
-                                 </StackPanel>
-                             </Border>
-                         </StackPanel>
-                          <TextBlock x:Name="StatusDetailText"
-                                     Text="点击启动加速后，将修改 hosts 文件以加速 GitHub 访问。"
-                                     FontSize="11"
-                                     Foreground="{StaticResource Text1Brush}"
-                                     TextWrapping="Wrap"
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <!-- Status Badge -->
+                            <Border Style="{StaticResource ChipStyle}"
+                                    Background="{StaticResource AccentLightBrush}"
+                                    BorderBrush="#1E3A5F"
+                                    BorderThickness="1">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="StatusIndicator"
+                                             Width="6" Height="6"
+                                             Fill="{StaticResource Text2Brush}"
+                                             VerticalAlignment="Center">
+                                        <Ellipse.Effect>
+                                            <DropShadowEffect ShadowDepth="0" BlurRadius="6" Color="{StaticResource Text2}" Opacity="0.4" />
+                                        </Ellipse.Effect>
+                                    </Ellipse>
+                                    <TextBlock x:Name="StatusTitleText"
+                                               Text="未启动"
+                                               Margin="5,0,0,0"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource Text0Brush}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="StatusDetailText"
+                                   Text="点击启动加速后，将修改 hosts 文件以加速 GitHub 访问。"
+                                   FontSize="11"
+                                   Foreground="{StaticResource Text1Brush}"
+                                   TextWrapping="Wrap"
                                    SnapsToDevicePixels="True"
                                    TextOptions.TextFormattingMode="Display" />
-                           <ProgressBar x:Name="ProgressBar"
-                                        Height="4"
-                                        Margin="0,8,0,0"
-                                        Background="#1E293B"
-                                        Foreground="{StaticResource AccentBrush}"
-                                        BorderThickness="0"
-                                        Visibility="Collapsed"
-                                        IsIndeterminate="False"
-                                        Minimum="0"
-                                        Maximum="100"
-                                        SnapsToDevicePixels="True"
-                                        UseLayoutRounding="True" />
-                           <TextBlock x:Name="ProgressText"
-                                      Margin="0,4,0,0"
-                                      FontSize="10"
-                                      Foreground="{StaticResource Text2Brush}"
-                                      TextWrapping="Wrap"
-                                      Visibility="Collapsed"
-                                      SnapsToDevicePixels="True"
-                                      TextOptions.TextFormattingMode="Display" />
-                          <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                              <CheckBox x:Name="RestoreOnExitCheckBox"
-                                        Content="退出时还原 hosts"
-                                        Foreground="{StaticResource Text1Brush}"
-                                        FontSize="12"
-                                        Margin="0,0,18,0"
-                                        Checked="RestoreOnExitCheckBox_Changed"
-                                        Unchecked="RestoreOnExitCheckBox_Changed" />
-                              <CheckBox x:Name="AutoRefreshOnLaunchCheckBox"
-                                        Content="启动时自动刷新"
-                                        Foreground="{StaticResource Text1Brush}"
-                                        FontSize="12"
-                                        Checked="AutoRefreshOnLaunchCheckBox_Changed"
-                                        Unchecked="AutoRefreshOnLaunchCheckBox_Changed" />
-                          </StackPanel>
-                      </StackPanel>
+                        <ProgressBar x:Name="ProgressBar"
+                                     Height="3"
+                                     Margin="0,6,0,0"
+                                     Background="#1E293B"
+                                     Foreground="{StaticResource AccentBrush}"
+                                     BorderThickness="0"
+                                     Visibility="Collapsed"
+                                     IsIndeterminate="False"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     SnapsToDevicePixels="True"
+                                     UseLayoutRounding="True" />
+                        <TextBlock x:Name="ProgressText"
+                                   Margin="0,3,0,0"
+                                   FontSize="10"
+                                   Foreground="{StaticResource Text2Brush}"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   SnapsToDevicePixels="True"
+                                   TextOptions.TextFormattingMode="Display" />
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <CheckBox x:Name="AutoRefreshOnLaunchCheckBox"
+                                      Content="启动时自动刷新"
+                                      Foreground="{StaticResource Text1Brush}"
+                                      FontSize="11"
+                                      Checked="AutoRefreshOnLaunchCheckBox_Changed"
+                                      Unchecked="AutoRefreshOnLaunchCheckBox_Changed" />
+                        </StackPanel>
+                    </StackPanel>
 
-                     <!-- Action Buttons -->
-                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Action Buttons -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button x:Name="StartButton" Style="{StaticResource PrimaryButtonStyle}" Click="StartButton_Click">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE768;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
-                                <TextBlock Text="启动加速" Margin="8,0,0,0" />
+                                <TextBlock Text="&#xE768;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" />
+                                <TextBlock Text="启动加速" Margin="6,0,0,0" />
                             </StackPanel>
                         </Button>
                         <Button x:Name="StopButton" Style="{StaticResource ToolbarButtonStyle}" Click="StopButton_Click">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE71A;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
-                                <TextBlock Text="停止" Margin="8,0,0,0" />
+                                <TextBlock Text="&#xE71A;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" />
+                                <TextBlock Text="停止" Margin="6,0,0,0" />
                             </StackPanel>
                         </Button>
                         <Button x:Name="DiagnoseButton" Style="{StaticResource ToolbarButtonStyle}" Click="DiagnoseButton_Click">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE9D2;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
-                                <TextBlock Text="检测" Margin="8,0,0,0" />
+                                <TextBlock Text="&#xE9D2;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" />
+                                <TextBlock Text="检测" Margin="6,0,0,0" />
                             </StackPanel>
                         </Button>
-                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="OpenLogsButton_Click">
-                             <StackPanel Orientation="Horizontal">
-                                 <TextBlock Text="&#xE81C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
-                                 <TextBlock Text="日志" Margin="8,0,0,0" />
-                             </StackPanel>
-                         </Button>
-                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="BackupHostsButton_Click">
-                             <StackPanel Orientation="Horizontal">
-                                 <TextBlock Text="&#xE74E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
-                                 <TextBlock Text="备份" Margin="8,0,0,0" />
-                             </StackPanel>
-                         </Button>
-                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="RestoreHostsButton_Click">
-                             <StackPanel Orientation="Horizontal">
-                                 <TextBlock Text="&#xE72C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
-                                 <TextBlock Text="恢复" Margin="8,0,0,0" />
-                             </StackPanel>
-                         </Button>
-                     </StackPanel>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="OpenLogsButton_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE81C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" />
+                                <TextBlock Text="日志" Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
+            <!-- ============================================ -->
             <!-- Tab Content -->
+            <!-- ============================================ -->
             <TabControl x:Name="MainTabs"
                         Grid.Row="1"
-                        Margin="24,16,24,20"
+                        Margin="20,12,20,16"
                         Background="Transparent"
                         BorderThickness="0"
                         Style="{StaticResource ModernTabControlStyle}">
                 <TabItem Header="平台加速" Style="{StaticResource ModernTabItemStyle}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="0,16,0,0">
+                        <StackPanel Margin="0,12,0,0">
                             <TextBlock Text="平台加速模块"
-                                       FontSize="15"
+                                       FontSize="14"
                                        FontWeight="SemiBold"
                                        Foreground="{StaticResource Text0Brush}"
-                                       Margin="0,0,0,12" />
+                                       Margin="0,0,0,10" />
                             <ItemsControl ItemsSource="{Binding PlatformModules}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
                                                   Style="{StaticResource ModernExpanderStyle}">
                                              <Expander.Header>
-                                                <Grid Margin="16,12,16,12">
+                                                <Grid Margin="14,10,14,10">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto" />
                                                         <ColumnDefinition Width="Auto" />
@@ -567,12 +570,12 @@
                                                     <CheckBox Grid.Column="0"
                                                               IsChecked="{Binding IsActive, Mode=TwoWay}"
                                                               VerticalAlignment="Center"
-                                                              Margin="0,0,12,0"
+                                                              Margin="0,0,10,0"
                                                               Cursor="Hand">
                                                         <CheckBox.Template>
                                                             <ControlTemplate TargetType="CheckBox">
                                                                 <Border x:Name="Root"
-                                                                        Width="20" Height="20"
+                                                                        Width="18" Height="18"
                                                                         CornerRadius="4"
                                                                         Background="#334155"
                                                                         BorderBrush="#475569"
@@ -580,7 +583,7 @@
                                                                     <TextBlock x:Name="CheckMark"
                                                                                Text="&#xE73E;"
                                                                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                                                               FontSize="14"
+                                                                               FontSize="12"
                                                                                Foreground="White"
                                                                                HorizontalAlignment="Center"
                                                                                VerticalAlignment="Center"
@@ -601,99 +604,99 @@
                                                     </CheckBox>
 
                                                     <Border Grid.Column="1"
-                                                            Width="32" Height="32"
-                                                            CornerRadius="8"
+                                                            Width="30" Height="30"
+                                                            CornerRadius="7"
                                                              Background="{Binding BrandColor, Converter={StaticResource ColorToBrushConverter}}"
                                                             VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Abbreviation}"
                                                                    Foreground="White"
-                                                                   FontSize="11"
+                                                                   FontSize="10"
                                                                    FontWeight="Bold"
                                                                    HorizontalAlignment="Center"
                                                                    VerticalAlignment="Center" />
                                                     </Border>
 
-                                                    <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="12,0,0,0">
+                                                    <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="10,0,0,0">
                                                         <TextBlock Text="{Binding Title}"
-                                                                   FontSize="14"
+                                                                   FontSize="13"
                                                                    FontWeight="SemiBold"
                                                                    Foreground="{StaticResource Text0Brush}" />
                                                         <TextBlock Text="{Binding Subtitle}"
-                                                                   Margin="0,2,0,0"
-                                                                   FontSize="12"
+                                                                   Margin="0,1,0,0"
+                                                                   FontSize="11"
                                                                    Foreground="{StaticResource Text2Brush}" />
                                                     </StackPanel>
 
                                                     <TextBlock Grid.Column="4"
                                                                Text="&#xE70D;"
                                                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                                               FontSize="14"
+                                                               FontSize="12"
                                                                Foreground="{StaticResource Text2Brush}"
                                                                VerticalAlignment="Center"
-                                                               Margin="10,0,0,0" />
+                                                               Margin="8,0,0,0" />
                                                 </Grid>
-                                            </Expander.Header>
-                                             <StackPanel>
-                                                 <TextBlock Text="加速域名列表"
-                                                            FontSize="12"
-                                                            FontWeight="SemiBold"
-                                                            Foreground="{StaticResource Text1Brush}"
-                                                            Margin="0,0,0,10" />
-                                                 <ItemsControl ItemsSource="{Binding Domains}">
-                                                     <ItemsControl.ItemsPanel>
-                                                         <ItemsPanelTemplate>
-                                                             <StackPanel />
-                                                         </ItemsPanelTemplate>
-                                                     </ItemsControl.ItemsPanel>
-                                                     <ItemsControl.ItemTemplate>
-                                                         <DataTemplate>
-                                                              <Border Margin="0,0,8,6"
-                                                                      Background="#334155"
-                                                                      BorderBrush="#475569"
-                                                                      BorderThickness="1"
-                                                                      CornerRadius="6"
-                                                                      Padding="10,6">
-                                                                  <Grid>
-                                                                      <Grid.ColumnDefinitions>
-                                                                          <ColumnDefinition Width="55" />
-                                                                          <ColumnDefinition Width="*" />
-                                                                          <ColumnDefinition Width="Auto" />
-                                                                      </Grid.ColumnDefinitions>
-                                                                      <TextBlock Grid.Column="0"
-                                                                                 Text="{Binding Prefix}"
-                                                                                 FontSize="10"
-                                                                                 Foreground="{StaticResource Text2Brush}"
-                                                                                 VerticalAlignment="Center" />
-                                                                      <TextBlock Grid.Column="1"
-                                                                                 Text="{Binding Domain}"
-                                                                                 FontSize="12"
-                                                                                 Foreground="{StaticResource Text0Brush}"
-                                                                                 VerticalAlignment="Center" />
-                                                                      <TextBlock Grid.Column="2"
-                                                                                 Text="{Binding CurrentIp}"
-                                                                                 FontSize="11"
-                                                                                 Foreground="{StaticResource AccentBrush}"
-                                                                                 VerticalAlignment="Center"
-                                                                                 Margin="12,0,0,0">
-                                                                          <TextBlock.Style>
-                                                                              <Style TargetType="TextBlock">
-                                                                                  <Style.Triggers>
-                                                                                      <Trigger Property="Text" Value="">
-                                                                                          <Setter Property="Visibility" Value="Collapsed" />
-                                                                                      </Trigger>
-                                                                                      <Trigger Property="Text" Value="{x:Null}">
-                                                                                          <Setter Property="Visibility" Value="Collapsed" />
-                                                                                      </Trigger>
-                                                                                  </Style.Triggers>
-                                                                              </Style>
-                                                                          </TextBlock.Style>
-                                                                      </TextBlock>
-                                                                  </Grid>
-                                                              </Border>
-                                                         </DataTemplate>
-                                                     </ItemsControl.ItemTemplate>
-                                                 </ItemsControl>
-                                             </StackPanel>
+                                             </Expander.Header>
+                                              <StackPanel>
+                                                  <TextBlock Text="加速域名列表"
+                                                             FontSize="11"
+                                                             FontWeight="SemiBold"
+                                                             Foreground="{StaticResource Text1Brush}"
+                                                             Margin="0,0,0,8" />
+                                                  <ItemsControl ItemsSource="{Binding Domains}">
+                                                      <ItemsControl.ItemsPanel>
+                                                          <ItemsPanelTemplate>
+                                                              <StackPanel />
+                                                          </ItemsPanelTemplate>
+                                                      </ItemsControl.ItemsPanel>
+                                                      <ItemsControl.ItemTemplate>
+                                                          <DataTemplate>
+                                                               <Border Margin="0,0,6,4"
+                                                                       Background="#334155"
+                                                                       BorderBrush="#475569"
+                                                                       BorderThickness="1"
+                                                                       CornerRadius="5"
+                                                                       Padding="8,5">
+                                                                   <Grid>
+                                                                       <Grid.ColumnDefinitions>
+                                                                           <ColumnDefinition Width="50" />
+                                                                           <ColumnDefinition Width="*" />
+                                                                           <ColumnDefinition Width="Auto" />
+                                                                       </Grid.ColumnDefinitions>
+                                                                       <TextBlock Grid.Column="0"
+                                                                                  Text="{Binding Prefix}"
+                                                                                  FontSize="9"
+                                                                                  Foreground="{StaticResource Text2Brush}"
+                                                                                  VerticalAlignment="Center" />
+                                                                       <TextBlock Grid.Column="1"
+                                                                                  Text="{Binding Domain}"
+                                                                                  FontSize="11"
+                                                                                  Foreground="{StaticResource Text0Brush}"
+                                                                                  VerticalAlignment="Center" />
+                                                                       <TextBlock Grid.Column="2"
+                                                                                  Text="{Binding CurrentIp}"
+                                                                                  FontSize="10"
+                                                                                  Foreground="{StaticResource AccentBrush}"
+                                                                                  VerticalAlignment="Center"
+                                                                                  Margin="10,0,0,0">
+                                                                           <TextBlock.Style>
+                                                                               <Style TargetType="TextBlock">
+                                                                                   <Style.Triggers>
+                                                                                       <Trigger Property="Text" Value="">
+                                                                                           <Setter Property="Visibility" Value="Collapsed" />
+                                                                                       </Trigger>
+                                                                                       <Trigger Property="Text" Value="{x:Null}">
+                                                                                           <Setter Property="Visibility" Value="Collapsed" />
+                                                                                       </Trigger>
+                                                                                   </Style.Triggers>
+                                                                               </Style>
+                                                                           </TextBlock.Style>
+                                                                       </TextBlock>
+                                                                   </Grid>
+                                                               </Border>
+                                                          </DataTemplate>
+                                                      </ItemsControl.ItemTemplate>
+                                                  </ItemsControl>
+                                              </StackPanel>
                                         </Expander>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -704,14 +707,14 @@
 
                 <TabItem Header="网络检测" Style="{StaticResource ModernTabItemStyle}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="0,16,0,0">
-                            <Grid Margin="0,0,0,12">
+                        <StackPanel Margin="0,12,0,0">
+                            <Grid Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="网络连通性检测"
-                                           FontSize="15"
+                                           FontSize="14"
                                            FontWeight="SemiBold"
                                            Foreground="{StaticResource Text0Brush}"
                                            VerticalAlignment="Center" />
@@ -720,8 +723,8 @@
                                         Click="DiagnoseButton_Click"
                                         VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE9D2;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" />
-                                        <TextBlock Text="开始检测" Margin="7,0,0,0" />
+                                        <TextBlock Text="&#xE9D2;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" />
+                                        <TextBlock Text="开始检测" Margin="6,0,0,0" />
                                     </StackPanel>
                                 </Button>
                             </Grid>
@@ -734,9 +737,9 @@
                                     </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="90" />
-                                        <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="72" />
                                     </Grid.ColumnDefinitions>
 
                                     <!-- Table Header -->
@@ -744,9 +747,9 @@
                                             Background="#1E293B"
                                             BorderBrush="{StaticResource LineBrush}"
                                             BorderThickness="0,0,1,1"
-                                            Padding="16,12">
+                                            Padding="14,10">
                                         <TextBlock Text="域名"
-                                                   FontSize="12"
+                                                   FontSize="11"
                                                    FontWeight="SemiBold"
                                                    Foreground="{StaticResource Text1Brush}" />
                                     </Border>
@@ -754,9 +757,9 @@
                                             Background="#1E293B"
                                             BorderBrush="{StaticResource LineBrush}"
                                             BorderThickness="0,0,1,1"
-                                            Padding="16,12">
+                                            Padding="14,10">
                                         <TextBlock Text="状态"
-                                                   FontSize="12"
+                                                   FontSize="11"
                                                    FontWeight="SemiBold"
                                                    Foreground="{StaticResource Text1Brush}" />
                                     </Border>
@@ -764,9 +767,9 @@
                                             Background="#1E293B"
                                             BorderBrush="{StaticResource LineBrush}"
                                             BorderThickness="0,0,1,1"
-                                            Padding="16,12">
+                                            Padding="14,10">
                                         <TextBlock Text="检测结果"
-                                                   FontSize="12"
+                                                   FontSize="11"
                                                    FontWeight="SemiBold"
                                                    Foreground="{StaticResource Text1Brush}" />
                                     </Border>
@@ -774,9 +777,9 @@
                                             Background="#1E293B"
                                             BorderBrush="{StaticResource LineBrush}"
                                             BorderThickness="0,0,0,1"
-                                            Padding="16,12">
+                                            Padding="14,10">
                                         <TextBlock Text="延迟"
-                                                   FontSize="12"
+                                                   FontSize="11"
                                                    FontWeight="SemiBold"
                                                    Foreground="{StaticResource Text1Brush}" />
                                     </Border>
@@ -791,55 +794,73 @@
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="90" />
-                                                            <ColumnDefinition Width="200" />
                                                             <ColumnDefinition Width="80" />
+                                                            <ColumnDefinition Width="200" />
+                                                            <ColumnDefinition Width="72" />
                                                         </Grid.ColumnDefinitions>
 
-                                                         <Border Grid.Column="0" Padding="16,14" Background="{StaticResource Bg1Brush}">
+                                                         <Border Grid.Column="0" Padding="14,12" Background="{StaticResource Bg1Brush}">
                                                              <StackPanel Orientation="Horizontal">
                                                                  <TextBlock Text="{Binding Description}"
-                                                                            FontSize="11"
+                                                                            FontSize="10"
                                                                             Foreground="{StaticResource Text2Brush}"
-                                                                            Width="60"
+                                                                            Width="55"
                                                                             VerticalAlignment="Center" />
                                                                  <TextBlock Text="{Binding Host}"
-                                                                            FontSize="13"
+                                                                            FontSize="12"
                                                                             Foreground="{StaticResource Text0Brush}"
                                                                             VerticalAlignment="Center" />
                                                              </StackPanel>
                                                          </Border>
-                                                         <Border Grid.Column="1" Padding="16,14" Background="{StaticResource Bg1Brush}">
-                                                             <TextBlock Text="{Binding Status}"
-                                                                        FontSize="12"
-                                                                        FontWeight="SemiBold"
-                                                                        VerticalAlignment="Center">
-                                                                 <TextBlock.Style>
-                                                                     <Style TargetType="TextBlock">
-                                                                         <Style.Triggers>
-                                                                             <DataTrigger Binding="{Binding IsSuccess}" Value="True">
-                                                                                 <Setter Property="Foreground" Value="{StaticResource GoodBrush}" />
-                                                                             </DataTrigger>
-                                                                             <DataTrigger Binding="{Binding IsSuccess}" Value="False">
-                                                                                 <Setter Property="Foreground" Value="{StaticResource BadBrush}" />
-                                                                             </DataTrigger>
-                                                                         </Style.Triggers>
-                                                                     </Style>
-                                                                 </TextBlock.Style>
-                                                             </TextBlock>
+                                                         <Border Grid.Column="1" Padding="14,12" Background="{StaticResource Bg1Brush}">
+                                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                 <Ellipse Width="5" Height="5"
+                                                                            Margin="0,0,5,0"
+                                                                            VerticalAlignment="Center">
+                                                                     <Ellipse.Style>
+                                                                         <Style TargetType="Ellipse">
+                                                                             <Style.Triggers>
+                                                                                 <DataTrigger Binding="{Binding IsSuccess}" Value="True">
+                                                                                     <Setter Property="Fill" Value="{StaticResource GoodBrush}" />
+                                                                                 </DataTrigger>
+                                                                                 <DataTrigger Binding="{Binding IsSuccess}" Value="False">
+                                                                                     <Setter Property="Fill" Value="{StaticResource BadBrush}" />
+                                                                                 </DataTrigger>
+                                                                             </Style.Triggers>
+                                                                         </Style>
+                                                                     </Ellipse.Style>
+                                                                 </Ellipse>
+                                                                 <TextBlock Text="{Binding Status}"
+                                                                            FontSize="11"
+                                                                            FontWeight="SemiBold"
+                                                                            VerticalAlignment="Center">
+                                                                     <TextBlock.Style>
+                                                                         <Style TargetType="TextBlock">
+                                                                             <Style.Triggers>
+                                                                                 <DataTrigger Binding="{Binding IsSuccess}" Value="True">
+                                                                                     <Setter Property="Foreground" Value="{StaticResource GoodBrush}" />
+                                                                                 </DataTrigger>
+                                                                                 <DataTrigger Binding="{Binding IsSuccess}" Value="False">
+                                                                                     <Setter Property="Foreground" Value="{StaticResource BadBrush}" />
+                                                                                 </DataTrigger>
+                                                                             </Style.Triggers>
+                                                                         </Style>
+                                                                     </TextBlock.Style>
+                                                                 </TextBlock>
+                                                             </StackPanel>
                                                          </Border>
-                                                         <Border Grid.Column="2" Padding="16,14" Background="{StaticResource Bg1Brush}">
+                                                         <Border Grid.Column="2" Padding="14,12" Background="{StaticResource Bg1Brush}">
                                                              <TextBlock Text="{Binding Detail}"
-                                                                        FontSize="12"
+                                                                        FontSize="11"
                                                                         Foreground="{StaticResource Text2Brush}"
                                                                         VerticalAlignment="Center"
                                                                         TextTrimming="CharacterEllipsis" />
                                                          </Border>
-                                                         <Border Grid.Column="3" Padding="16,14" Background="{StaticResource Bg1Brush}">
+                                                         <Border Grid.Column="3" Padding="14,12" Background="{StaticResource Bg1Brush}">
                                                              <TextBlock Text="{Binding Latency}"
                                                                         HorizontalAlignment="Right"
                                                                         VerticalAlignment="Center"
-                                                                        FontSize="13"
+                                                                        FontSize="12"
                                                                         FontWeight="SemiBold"
                                                                         Foreground="{StaticResource Text0Brush}" />
                                                          </Border>
@@ -856,21 +877,23 @@
             </TabControl>
         </Grid>
 
+        <!-- ============================================ -->
         <!-- Status Bar -->
+        <!-- ============================================ -->
         <Border Grid.Row="2"
                 Background="{StaticResource Bg1Brush}"
                 BorderBrush="{StaticResource LineBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="18,0">
+                Padding="16,0">
             <DockPanel>
                 <TextBlock Text="GitHub Turbo v1.0"
                            VerticalAlignment="Center"
-                           FontSize="11"
+                           FontSize="10"
                            Foreground="{StaticResource Text2Brush}" />
                 <TextBlock DockPanel.Dock="Right"
                            Text="GitHub / GitLab 网络加速"
                            VerticalAlignment="Center"
-                           FontSize="11"
+                           FontSize="10"
                            Foreground="{StaticResource Text2Brush}" />
             </DockPanel>
         </Border>

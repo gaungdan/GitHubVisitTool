@@ -204,86 +204,6 @@ public static class HostsFileService
     public static HostsOperationResult TryRemoveAllHosts()
         => MutateHosts(RemoveAllKnownBlocks, flushDns: true);
 
-    public static HostsOperationResult BackupHosts()
-    {
-        try
-        {
-            if (!File.Exists(HostsPath))
-                EnsureDefaultHosts();
-
-            AppPaths.EnsureDirectories();
-            var backupPath = CreateBackupPath();
-            File.Copy(HostsPath, backupPath, overwrite: true);
-            return HostsOperationResult.Ok($"hosts 已备份到 {backupPath}", backupPath);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return HostsOperationResult.Fail($"权限不足，无法备份 hosts：{ex.Message}");
-        }
-        catch (IOException ex)
-        {
-            return HostsOperationResult.Fail($"hosts 文件被占用或不可读：{ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            return HostsOperationResult.Fail($"备份 hosts 失败：{ex.Message}");
-        }
-    }
-
-    public static HostsOperationResult RestoreLatestBackup()
-    {
-        try
-        {
-            var latest = ListBackups().FirstOrDefault();
-            if (latest is null)
-                return HostsOperationResult.Fail("没有可恢复的 hosts 备份。");
-
-            var fileInfo = PrepareHostsFile();
-            var wasReadOnly = fileInfo.IsReadOnly;
-            if (!TryClearReadOnly(fileInfo, out var readOnlyError))
-                return HostsOperationResult.Fail(readOnlyError);
-
-            try
-            {
-                var currentBackup = BackupHosts();
-                if (!currentBackup.Success)
-                    return currentBackup;
-
-                ReplaceHostsAtomically(File.ReadAllLines(latest, NoBomUtf8));
-                var flush = FlushDnsCache();
-                return flush.Success
-                    ? HostsOperationResult.Ok($"已从 {latest} 恢复 hosts。", latest)
-                    : HostsOperationResult.Ok($"已恢复 hosts，但刷新 DNS 缓存失败：{flush.Message}", latest);
-            }
-            finally
-            {
-                RestoreReadOnly(fileInfo, wasReadOnly);
-            }
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return HostsOperationResult.Fail($"权限不足，无法恢复 hosts：{ex.Message}");
-        }
-        catch (IOException ex)
-        {
-            return HostsOperationResult.Fail($"恢复 hosts 失败，文件可能被占用：{ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            return HostsOperationResult.Fail($"恢复 hosts 失败：{ex.Message}");
-        }
-    }
-
-    public static IReadOnlyList<string> ListBackups()
-    {
-        if (!Directory.Exists(AppPaths.BackupDirectory))
-            return [];
-
-        return Directory.GetFiles(AppPaths.BackupDirectory, "hosts-*.bak")
-            .OrderByDescending(File.GetLastWriteTimeUtc)
-            .ToArray();
-    }
-
     static HostsOperationResult MutateHosts(Func<IReadOnlyList<string>, IReadOnlyList<string>> mutate, bool flushDns)
     {
         try
@@ -300,18 +220,15 @@ public static class HostsFileService
             {
                 var existing = File.ReadAllLines(HostsPath, NoBomUtf8);
                 var updated = mutate(existing);
-                var backup = BackupHosts();
-                if (!backup.Success)
-                    return backup;
 
                 ReplaceHostsAtomically(updated);
                 if (!flushDns)
-                    return HostsOperationResult.Ok("hosts 写入成功。", backup.Path);
+                    return HostsOperationResult.Ok("hosts 写入成功。");
 
                 var flush = FlushDnsCache();
                 return flush.Success
-                    ? HostsOperationResult.Ok("hosts 写入成功，DNS 缓存已刷新。", backup.Path)
-                    : HostsOperationResult.Ok($"hosts 写入成功，但刷新 DNS 缓存失败：{flush.Message}", backup.Path);
+                    ? HostsOperationResult.Ok("hosts 写入成功，DNS 缓存已刷新。")
+                    : HostsOperationResult.Ok($"hosts 写入成功，但刷新 DNS 缓存失败：{flush.Message}");
             }
             finally
             {
@@ -481,12 +398,6 @@ public static class HostsFileService
         }
     }
 
-    static string CreateBackupPath()
-    {
-        AppPaths.EnsureDirectories();
-        return Path.Combine(AppPaths.BackupDirectory, $"hosts-{DateTime.Now:yyyyMMdd-HHmmss-fff}.bak");
-    }
-
     static HostsOperationResult FlushDnsCache()
     {
         try
@@ -516,11 +427,11 @@ public static class HostsFileService
 
 }
 
-public sealed record HostsOperationResult(bool Success, string Message, string? Path = null)
+public sealed record HostsOperationResult(bool Success, string Message)
 {
-    public static HostsOperationResult Ok(string message, string? path = null) => new(true, message, path);
+    public static HostsOperationResult Ok(string message) => new(true, message);
 
-    public static HostsOperationResult Fail(string message, string? path = null) => new(false, message, path);
+    public static HostsOperationResult Fail(string message) => new(false, message);
 }
 
 public sealed record HostsConflictEntry(string Domain, string Ip, int LineNumber, bool IsLoopbackOrPrivate);

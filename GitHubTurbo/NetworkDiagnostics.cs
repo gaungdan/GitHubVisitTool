@@ -9,10 +9,10 @@ namespace GitHubTurbo;
 public static class NetworkDiagnostics
 {
     public static Task<DiagnosticResult> CheckHostAsync(string host, CancellationToken cancellationToken)
-        => CheckEndpointAsync(host, host, includeHttpProbe: true, TimeSpan.FromSeconds(4), cancellationToken);
+        => CheckEndpointAsync(host, host, includeHttpProbe: true, TimeSpan.FromSeconds(2.5), cancellationToken);
 
     public static Task<DiagnosticResult> CheckIpForHostAsync(string host, string ip, CancellationToken cancellationToken)
-        => CheckEndpointAsync(host, ip, includeHttpProbe: true, TimeSpan.FromSeconds(4), cancellationToken);
+        => CheckEndpointAsync(host, ip, includeHttpProbe: true, TimeSpan.FromSeconds(2.5), cancellationToken);
 
     public static Task<DiagnosticResult> CheckTlsAsync(string host, string ip, CancellationToken cancellationToken)
         => CheckEndpointAsync(host, ip, includeHttpProbe: false, TimeSpan.FromMilliseconds(1500), cancellationToken);
