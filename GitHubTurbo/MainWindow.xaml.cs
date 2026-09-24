@@ -111,7 +111,19 @@ public partial class MainWindow : Window
         if (vm is null) return;
 
         foreach (var domain in vm.Domains)
-            domain.CurrentIp = entries.TryGetValue(domain.Domain, out var ip) ? ip : null;
+        {
+            // MITM mode keeps loopback in hosts; the real egress IP lives in the endpoint cache.
+            var backend = controller.GetBackendIp(domain.Domain);
+            if (!string.IsNullOrEmpty(backend))
+            {
+                domain.CurrentIp = backend;
+                continue;
+            }
+
+            domain.CurrentIp = entries.TryGetValue(domain.Domain, out var ip) && !IpAddressHelpers.IsPrivateOrLoopback(ip)
+                ? ip
+                : entries.ContainsKey(domain.Domain) ? "解析中" : null;
+        }
     }
 
     async void StartButton_Click(object sender, RoutedEventArgs e)

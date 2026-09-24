@@ -8,11 +8,12 @@ namespace GitHubTurbo;
 
 public static class NetworkDiagnostics
 {
+    // Through-proxy checks include MITM + outbound, so allow a slightly longer budget.
     public static Task<DiagnosticResult> CheckHostAsync(string host, CancellationToken cancellationToken)
-        => CheckEndpointAsync(host, host, includeHttpProbe: true, TimeSpan.FromSeconds(2.5), cancellationToken);
+        => CheckEndpointAsync(host, host, includeHttpProbe: true, TimeSpan.FromSeconds(5), cancellationToken);
 
     public static Task<DiagnosticResult> CheckIpForHostAsync(string host, string ip, CancellationToken cancellationToken)
-        => CheckEndpointAsync(host, ip, includeHttpProbe: true, TimeSpan.FromSeconds(2.5), cancellationToken);
+        => CheckEndpointAsync(host, ip, includeHttpProbe: true, TimeSpan.FromSeconds(3), cancellationToken);
 
     public static Task<DiagnosticResult> CheckTlsAsync(string host, string ip, CancellationToken cancellationToken)
         => CheckEndpointAsync(host, ip, includeHttpProbe: false, TimeSpan.FromMilliseconds(1500), cancellationToken);

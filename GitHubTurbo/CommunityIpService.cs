@@ -1,38 +1,75 @@
+using System.IO;
 using System.Net.Http;
 using System.Text.Json;
 
 namespace GitHubTurbo;
 
 /// <summary>
-/// Fetches community-maintained IP lists (e.g. ineo6/hosts) as a base data source.
-/// These IPs are crowd-validated and updated frequently by the community.
+/// Fetches community-maintained IP lists (ineo6/hosts) as a base data source.
+/// Mirrors are tried from most China-reachable to least, with an embedded
+/// seed list as the final fallback so first-run quality doesn't depend on
+/// raw.githubusercontent.com being reachable.
 /// </summary>
 public static class CommunityIpService
 {
-    // ineo6/hosts raw GitHub URL - the most popular community GitHub hosts project
-    const string Ineo6HostsUrl = "https://raw.githubusercontent.com/ineo6/hosts/master/hosts";
+    static readonly string[] SourceUrls =
+    [
+        "https://cdn.jsdelivr.net/gh/ineo6/hosts@master/hosts",
+        "https://fastly.jsdelivr.net/gh/ineo6/hosts@master/hosts",
+        "https://raw.githubusercontent.com/ineo6/hosts/master/hosts",
+    ];
 
-    static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(5) };
+    const string SeedResourceName = "GitHubTurbo.community-ip-seed.txt";
+
+    static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(4) };
 
     /// <summary>
     /// Fetches community IP list and extracts GitHub-related domain-to-IP mappings.
-    /// Returns empty list if fetch fails (graceful degradation).
+    /// Falls back to the embedded seed list if all mirrors fail.
     /// </summary>
     public static async Task<IReadOnlyList<CommunityIpEntry>> FetchGitHubIpsAsync(
         IReadOnlySet<string> targetDomains,
         CancellationToken cancellationToken = default)
     {
+        foreach (var url in SourceUrls)
+        {
+            try
+            {
+                using var response = await Client.GetAsync(url, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                var entries = ParseHostsContent(content, targetDomains);
+                if (entries.Count > 0)
+                {
+                    await AppLogger.InfoAsync($"Community IP list loaded from {new Uri(url).Host} ({entries.Count} entries).");
+                    return entries;
+                }
+            }
+            catch (Exception ex)
+            {
+                await AppLogger.ErrorAsync($"Community IP mirror {url} failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        await AppLogger.ErrorAsync("All community IP mirrors failed; using embedded seed list.");
+        return ParseHostsContent(LoadSeedContent(), targetDomains);
+    }
+
+    static string LoadSeedContent()
+    {
         try
         {
-            using var response = await Client.GetAsync(Ineo6HostsUrl, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            return ParseHostsContent(content, targetDomains);
+            var assembly = typeof(CommunityIpService).Assembly;
+            using var stream = assembly.GetManifestResourceStream(SeedResourceName);
+            if (stream is null)
+                return string.Empty;
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
         }
         catch (Exception ex)
         {
-            await AppLogger.ErrorAsync($"Failed to fetch community IP list: {ex.GetType().Name}: {ex.Message}");
-            return [];
+            AppLogger.ErrorAsync($"Embedded seed list unreadable: {ex.GetType().Name}: {ex.Message}");
+            return string.Empty;
         }
     }
 

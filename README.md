@@ -14,13 +14,14 @@
 
 ## ✨ 功能
 
-- 🚀 **智能 DNS 解析** — 系统 DNS + Cloudflare/Google/Tencent DoH 多源兜底
-- 🎯 **最优 IP 筛选** — 两阶段探针（TLS 快速筛选 → TCP+HTTP 精确测速），取中位数延迟选出最稳 IP
+- 🛡️ **本地 MITM 反向代理** — hosts 指向 127.0.0.1，出站自动使用假 SNI 绕过 SNI 阻断
+- 🚀 **智能 DNS 解析** — 社区 IP 库 + 系统 DNS + DNSPod/Ali DoH 多源兜底
+- 🎯 **最优 IP 筛选** — 多维探针（ping + TCP + HTTP 响应）综合评分选出出口 IP
+- 🔀 **字节流透传** — 不解析 HTTP，HTTP/2 / WebSocket / 大文件下载天然兼容
 - 🔒 **冲突检测** — 自动识别 Steam++ 等第三方加速器写入的冲突 hosts 条目
-- 🔄 **断网保持** — 扫描失败时自动保留旧 hosts 记录，避免断网
-- 📊 **实时进度** — 解析/写入/检测各阶段进度可视化
+- 🔄 **断网保持** — 扫描失败时自动保留原有出口 IP，避免断网
+- 📊 **实时进度** — 启动/写入/检测各阶段进度可视化
 - 🟢 **系统托盘** — 关闭窗口最小到托盘，不占用任务栏
-- 🧹 **安全还原** — 退出时可选自动还原 hosts 文件
 
 ## 📥 下载
 
@@ -34,10 +35,10 @@
 ## 🚀 使用
 
 1. 下载 `GitHubTurbo.exe`
-2. 右键 → **以管理员身份运行**（修改 hosts 文件需要管理员权限）
-3. 点击 **启动加速**，自动完成 DNS 解析 → hosts 写入 → 网络检测
-4. 点击 **网络检测** 可单独验证各域名连通性
-5. 勾选 **退出时还原 hosts** 可在关闭程序时自动清理
+2. 右键 → **以管理员身份运行**（修改 hosts、绑定 443、安装根证书需要管理员权限）
+3. 点击 **启动加速**，自动完成：启动本地代理 → hosts 指向 127.0.0.1 → 出口 IP 预热 → 网络检测
+4. 首次使用会安装 `GitHubTurbo Root CA` 到系统信任根（用于本地 HTTPS 解密）
+5. 点击 **网络检测** 可单独验证各域名连通性
 
 ## 🏗️ 从源码构建
 
@@ -74,7 +75,15 @@ GitHubTurbo/
 ├── GitLabPlatformProvider.cs        # GitLab 平台域名定义
 ├── IpAddressHelpers.cs              # IP 地址工具方法
 ├── IpSelectionHelpers.cs            # IP 优选算法辅助
-└── ViewModels.cs                    # MVVM 数据绑定模型
+├── IpScoringService.cs              # 多维 IP 评分
+├── IpRefreshService.cs              # 出口 IP 定时刷新
+├── CommunityIpService.cs            # 社区 IP 源
+├── ViewModels.cs                    # MVVM 数据绑定模型
+└── Proxy/
+    ├── CertificateManager.cs        # 根 CA 与域名证书
+    ├── EndpointCache.cs             # 域名 → 出口 IP 缓存
+    ├── MitmProxyServer.cs           # 字节流 MITM 代理
+    └── TlsSniMode.cs                # 出站假 SNI 策略
 ```
 
 ## 🔧 添加新平台
@@ -85,9 +94,9 @@ GitHubTurbo/
 
 ## 📝 配置说明
 
-- **日志位置**: `%LOCALAPPDATA%\GitHubTurbo\logs\turbo-YYYY-MM-DD.log`
+- **日志位置**: 程序目录下 `logs\turbo-YYYY-MM-DD.log`
 - **设置文件**: `%LOCALAPPDATA%\GitHubTurbo\settings.json`
-- **Hosts 备份**: `%LOCALAPPDATA%\GitHubTurbo\backups\`
+- **根证书**: `%LOCALAPPDATA%\GitHubTurbo\certs\githubturbo-ca.pfx`
 
 ## 🤝 CI/CD
 

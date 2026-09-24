@@ -17,4 +17,8 @@
     <DebugType>none</DebugType>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="community-ip-seed.txt" />
+  </ItemGroup>
+
 </Project>

@@ -469,7 +469,7 @@
                             </Border>
                         </StackPanel>
                         <TextBlock x:Name="StatusDetailText"
-                                   Text="点击启动加速后，将修改 hosts 文件以加速 GitHub 访问。"
+                                   Text="点击启动加速后，流量将经本地代理转发，自动绕过 SNI 阻断。"
                                    FontSize="11"
                                    Foreground="{StaticResource Text1Brush}"
                                    TextWrapping="Wrap"

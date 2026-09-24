@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
+using GitHubTurbo.Proxy;
 
 namespace GitHubTurbo;
 
@@ -14,6 +15,10 @@ public sealed class AppController : IDisposable
     static Task<IReadOnlyList<CommunityIpEntry>>? _communityCacheTask;
     static readonly object _communityCacheLock = new();
     readonly Dictionary<string, TurboStatus> platformStatuses = new();
+    readonly CertificateManager _certManager = new();
+    readonly EndpointCache _endpointCache = new();
+    readonly MitmProxyServer _proxyServer;
+    readonly SemaphoreSlim _proxyLock = new(1, 1);
     IpRefreshService _refreshService = null!;
     AppSettings settings = new();
 
@@ -25,13 +30,21 @@ public sealed class AppController : IDisposable
 
     public bool AnyRunning => platformStatuses.Values.Any(s => s.IsRunning);
 
+    public AppController()
+    {
+        _proxyServer = new MitmProxyServer(_certManager, _endpointCache);
+    }
+
+    public string? GetBackendIp(string domain) => _endpointCache.Describe(domain);
+
     public async Task InitializeAsync()
     {
         AppPaths.EnsureDirectories();
         settings = await AppSettings.LoadAsync();
-        _refreshService = new IpRefreshService();
+        _refreshService = new IpRefreshService(_endpointCache);
         await AppLogger.InfoAsync("GitHub Turbo started.");
 
+        var needProxy = false;
         foreach (var provider in PlatformProviders.All)
         {
             var conflicts = HostsFileService.FindConflictingEntries(provider);
@@ -49,13 +62,24 @@ public sealed class AppController : IDisposable
                 continue;
             }
 
-            var hasLoopbackEntries = HostsFileService.HasLoopbackEntries(provider.Descriptor.Id);
-            platformStatuses[provider.Descriptor.Id] = hasLoopbackEntries
-                ? new TurboStatus(false, "需刷新", "检测到旧本机代理 hosts 条目。点击启动将刷新为真实 IP。", "需刷新", "未检测", "可执行网络检测以验证连通性。")
-                : hasLegacyEntries
-                    ? new TurboStatus(false, "需刷新", "检测到旧版 GitHubTurbo hosts 条目。点击启动将刷新为分平台记录。", "需刷新", "未检测", "可执行网络检测以验证连通性。")
-                : new TurboStatus(true, $"{provider.Descriptor.Title} 加速已开启", "hosts 文件已写入加速条目。", "已修改", "未检测", "可执行网络检测以验证连通性。");
+            var entries = HostsFileService.ReadEntries(provider.Descriptor.Id);
+            var hasLoopback = entries.Values.Any(IpAddressHelpers.IsPrivateOrLoopback);
+            var hasLegacyIps = hasLegacyEntries || (entries.Count > 0 && !hasLoopback);
+
+            if (hasLegacyIps)
+            {
+                platformStatuses[provider.Descriptor.Id] = new TurboStatus(false, "需刷新",
+                    "检测到旧版 hosts 条目。点击启动将切换为本地代理加速。", "需刷新", "未检测", "可执行网络检测以验证连通性。");
+                continue;
+            }
+
+            // Loopback entries mean MITM mode is armed; the proxy must be up or browsing breaks.
+            needProxy = true;
+            platformStatuses[provider.Descriptor.Id] = BuildRunningStatus(provider, "本地代理加速运行中，hosts 已指向 127.0.0.1。");
         }
+
+        if (needProxy)
+            await EnsureProxyRunningAsync();
 
         if (settings.AutoRefreshOnLaunch)
         {
@@ -81,41 +105,28 @@ public sealed class AppController : IDisposable
             var conflicts = HostsFileService.FindConflictingEntries(provider);
             if (conflicts.Count > 0)
             {
-                var status = BuildConflictStatus(provider, conflicts);
-                UpdatePlatform(platformId, status);
+                UpdatePlatform(platformId, BuildConflictStatus(provider, conflicts));
                 await AppLogger.ErrorAsync($"Conflicting hosts entries detected for {provider.Descriptor.Title}: {string.Join(", ", conflicts.Select(x => $"{x.Domain}={x.Ip}"))}");
                 return;
             }
 
-            var previousIps = HostsFileService.ReadEntries(platformId);
-            progress?.Report(new(platformId, $"正在解析 {provider.Descriptor.Title} 域名…", 5, 100));
-
-            var scannedIps = await ResolvePlatformIpsAsync(provider, previousIps, progress);
-            var ips = MergeWithPreviousIps(provider, scannedIps, previousIps);
-            if (ips.Count == 0)
+            progress?.Report(new(platformId, "正在启动本地代理…", 5, 100));
+            var proxyError = await EnsureProxyRunningAsync();
+            if (proxyError is not null)
             {
-                UpdatePlatform(platformId, TurboStatus.Stopped with { Detail = "没有找到可用 IP，请检查 DNS 或网络出口。" });
+                UpdatePlatform(platformId, TurboStatus.Stopped with { Detail = proxyError });
                 return;
             }
 
-            if (scannedIps.Count == 0 && previousIps.Count > 0)
-            {
-                UpdatePlatform(platformId, (platformStatuses.GetValueOrDefault(platformId) ?? TurboStatus.Stopped) with
-                {
-                    Detail = "本次 IP 扫描失败，已保留原有 hosts 记录。",
-                    LastChecked = $"最后扫描时间：{DateTime.Now:HH:mm:ss}",
-                });
-                await AppLogger.ErrorAsync($"IP refresh failed for {provider.Descriptor.Title}; existing hosts entries were preserved.");
-                return;
-            }
-
-            progress?.Report(new(platformId, $"正在写入 {provider.Descriptor.Title} Hosts 记录…", 85, 100));
+            progress?.Report(new(platformId, $"正在写入 {provider.Descriptor.Title} Hosts 记录…", 15, 100));
+            var domains = provider.Domains.Select(d => d.Domain).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var loopbackEntries = domains.ToDictionary(d => d, _ => "127.0.0.1", StringComparer.OrdinalIgnoreCase);
 
             await HostsFileLock.WaitAsync();
             try
             {
-                var applied = HostsFileService.TryApplyHosts(platformId, ips);
-                await AppLogger.InfoAsync($"Apply hosts for {provider.Descriptor.Title}: {applied.Message}");
+                var applied = HostsFileService.TryApplyHosts(platformId, loopbackEntries);
+                await AppLogger.InfoAsync($"Apply loopback hosts for {provider.Descriptor.Title}: {applied.Message}");
                 if (!applied.Success)
                 {
                     UpdatePlatform(platformId, TurboStatus.Stopped with { Detail = applied.Message });
@@ -130,12 +141,15 @@ public sealed class AppController : IDisposable
                 HostsFileLock.Release();
             }
 
-            var newStatus = new TurboStatus(true, $"{provider.Descriptor.Title} 加速已开启",
-                $"已筛选并写入 {ips.Count} 条 hosts 记录。", "已修改", "未检测", "可执行网络检测以验证连通性。");
-            UpdatePlatform(platformId, newStatus);
-            await AppLogger.InfoAsync($"{provider.Descriptor.Title} hosts acceleration enabled.");
+            UpdatePlatform(platformId, BuildRunningStatus(provider,
+                $"已指向本地代理（127.0.0.1），共 {domains.Length} 个域名。"));
+            await AppLogger.InfoAsync($"{provider.Descriptor.Title} MITM acceleration enabled.");
 
-            progress?.Report(new(platformId, $"正在检测 {provider.Descriptor.Title} 网络连通性…", 95, 100));
+            // Warm the endpoint cache so the first browser hit is fast and the UI can show real IPs.
+            progress?.Report(new(platformId, $"正在为 {provider.Descriptor.Title} 优选出口 IP…", 25, 100));
+            await WarmupEndpointsAsync(platformId, domains, progress);
+
+            progress?.Report(new(platformId, $"正在检测 {provider.Descriptor.Title} 网络连通性…", 92, 100));
             await RunDiagnosticsCoreAsync(platformId, progress);
             progress?.Report(new(platformId, $"{provider.Descriptor.Title} 加速完成", 100, 100));
         }
@@ -143,6 +157,66 @@ public sealed class AppController : IDisposable
         {
             await AppLogger.ErrorAsync($"Start failed for {platformId}: {ex.GetType().Name}: {ex.Message}");
             UpdatePlatform(platformId, TurboStatus.Stopped with { Detail = ex.Message });
+        }
+    }
+
+    async Task WarmupEndpointsAsync(string platformId, IReadOnlyList<string> domains, IProgress<PlatformProgressEventArgs>? progress)
+    {
+        var completed = 0;
+        var tasks = domains.Select(async domain =>
+        {
+            await IpProbeGate.WaitAsync();
+            try
+            {
+                await _endpointCache.WarmupAsync(domain);
+            }
+            finally
+            {
+                IpProbeGate.Release();
+            }
+            var counted = Interlocked.Increment(ref completed);
+            progress?.Report(new(platformId, $"正在探测 {domain}… ({counted}/{domains.Count})",
+                25 + (int)((double)counted / domains.Count * 65), 100));
+        });
+        await Task.WhenAll(tasks);
+    }
+
+    async Task<string?> EnsureProxyRunningAsync()
+    {
+        await _proxyLock.WaitAsync();
+        try
+        {
+            if (_proxyServer.IsRunning)
+                return null;
+
+            _proxyServer.Start();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            await AppLogger.ErrorAsync($"Start MITM proxy failed: {ex.GetType().Name}: {ex.Message}");
+            return $"本地代理启动失败：{ex.Message}";
+        }
+        finally
+        {
+            _proxyLock.Release();
+        }
+    }
+
+    async Task StopProxyIfIdleAsync()
+    {
+        if (AnyRunning)
+            return;
+
+        await _proxyLock.WaitAsync();
+        try
+        {
+            if (_proxyServer.IsRunning)
+                await _proxyServer.StopAsync();
+        }
+        finally
+        {
+            _proxyLock.Release();
         }
     }
 
@@ -165,6 +239,7 @@ public sealed class AppController : IDisposable
                     settings.SetPlatformEnabled(platformId, false);
                     await settings.SaveAsync();
                     UpdatePlatform(platformId, TurboStatus.Stopped);
+                    await StopProxyIfIdleAsync();
                     return;
                 }
 
@@ -179,12 +254,14 @@ public sealed class AppController : IDisposable
                 settings.SetPlatformEnabled(platformId, false);
                 await settings.SaveAsync();
                 UpdatePlatform(platformId, TurboStatus.Stopped);
-                await AppLogger.InfoAsync($"{provider.Descriptor.Title} hosts acceleration disabled.");
+                await AppLogger.InfoAsync($"{provider.Descriptor.Title} MITM acceleration disabled.");
             }
             finally
             {
                 HostsFileLock.Release();
             }
+
+            await StopProxyIfIdleAsync();
         }
         catch (Exception ex)
         {
@@ -195,18 +272,15 @@ public sealed class AppController : IDisposable
 
     public async Task StartAllAsync(IProgress<PlatformProgressEventArgs>? progress = null)
     {
-        var tasks = PlatformProviders.All
-            .Select(p => StartPlatformAsync(p.Descriptor.Id, progress))
-            .ToArray();
-        await Task.WhenAll(tasks);
+        // Sequential: the proxy and hosts file are shared resources.
+        foreach (var provider in PlatformProviders.All)
+            await StartPlatformAsync(provider.Descriptor.Id, progress);
     }
 
     public async Task StopAllAsync()
     {
-        var tasks = PlatformProviders.All
-            .Select(p => StopPlatformAsync(p.Descriptor.Id))
-            .ToArray();
-        await Task.WhenAll(tasks);
+        foreach (var provider in PlatformProviders.All)
+            await StopPlatformAsync(provider.Descriptor.Id);
     }
 
     public async Task SetAutoRefreshOnLaunchAsync(bool value)
@@ -235,31 +309,51 @@ public sealed class AppController : IDisposable
         if (provider is null)
             return [];
 
-        var hostsEntries = HostsFileService.ReadEntries(platformId);
         var hosts = PlatformDiagnostics.GetDiagnosticDomains(provider).Select(d => d.Domain).ToArray();
         var completedCount = 0;
 
         var tasks = hosts.Select(async host =>
         {
-            hostsEntries.TryGetValue(host, out var currentIp);
-            var result = currentIp is null
-                ? await NetworkDiagnostics.CheckHostAsync(host, CancellationToken.None)
-                : await NetworkDiagnostics.CheckIpForHostAsync(host, currentIp, CancellationToken.None);
-            var detail = currentIp is null ? result.Detail : $"{currentIp} / {result.Detail}";
+            // Through-proxy check exercises the real browsing path (MITM + outbound).
+            var result = await NetworkDiagnostics.CheckHostAsync(host, CancellationToken.None);
+            var backendIp = _endpointCache.Describe(host);
+            var detail = backendIp is null ? result.Detail : $"{backendIp} / {result.Detail}";
             var counted = Interlocked.Increment(ref completedCount);
             progress?.Report(new(platformId, $"正在检测 {host}… ({counted}/{hosts.Length})",
                 (int)((double)completedCount / hosts.Length * 100), 100));
-            return new DomainDiagnosticResult(host, currentIp ?? "-", result.Success, result.Latency, detail);
+            return new DomainDiagnosticResult(host, backendIp ?? "-", result.Success, result.Latency, detail);
         });
 
         var results = (await Task.WhenAll(tasks)).ToList();
+
+        var repaired = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var failedDomains = results.Where(r => !r.Success).Select(r => r.Host).ToList();
+        if (failedDomains.Count > 0 && failedDomains.Count < results.Count)
+        {
+            foreach (var domain in failedDomains.Take(8))
+                await _endpointCache.WarmupAsync(domain);
+            for (var index = 0; index < results.Count; index++)
+            {
+                var host = results[index].Host;
+                if (!failedDomains.Contains(host))
+                    continue;
+                var recheck = await NetworkDiagnostics.CheckHostAsync(host, CancellationToken.None);
+                results[index] = new DomainDiagnosticResult(host, _endpointCache.Describe(host) ?? "-",
+                    recheck.Success, recheck.Latency,
+                    recheck.Success ? $"已刷新出口 IP：{recheck.Detail}" : recheck.Detail);
+                if (recheck.Success)
+                    repaired[host] = _endpointCache.Describe(host) ?? "-";
+            }
+        }
+
         var successCount = results.Count(x => x.Success);
         var overall = results.FirstOrDefault(x => x.Success) ??
             new DomainDiagnosticResult(provider.Domains[0].Domain, "-", false, "不可用", "所有域名检测失败。");
 
+        var repairNote = repaired.Count > 0 ? $"已自动更换 {repaired.Count} 个出口 IP。" : string.Empty;
         UpdatePlatform(platformId, platformStatuses.GetValueOrDefault(platformId) ?? TurboStatus.Stopped with
         {
-            Detail = $"网络测试已完成，{successCount}/{results.Count} 个域名可用。",
+            Detail = $"网络测试已完成，{successCount}/{results.Count} 个域名可用。{repairNote}",
             Latency = overall.Latency,
             LastChecked = $"最后检测时间：{DateTime.Now:HH:mm:ss}",
         });
@@ -274,48 +368,23 @@ public sealed class AppController : IDisposable
             return;
 
         var primaryDomain = provider.Domains[0].Domain;
-        var entries = HostsFileService.ReadEntries(platformId);
-        entries.TryGetValue(primaryDomain, out var currentIp);
-        var result = currentIp is null
-            ? await NetworkDiagnostics.CheckHostAsync(primaryDomain, CancellationToken.None)
-            : await NetworkDiagnostics.CheckIpForHostAsync(primaryDomain, currentIp, CancellationToken.None);
+        var result = await NetworkDiagnostics.CheckHostAsync(primaryDomain, CancellationToken.None);
+
+        if (!result.Success)
+        {
+            await _endpointCache.WarmupAsync(primaryDomain);
+            result = await NetworkDiagnostics.CheckHostAsync(primaryDomain, CancellationToken.None);
+        }
+
+        var backendIp = _endpointCache.Describe(primaryDomain);
         var checkedAt = $"最后检测时间：{DateTime.Now:HH:mm:ss}";
         UpdatePlatform(platformId, platformStatuses.GetValueOrDefault(platformId) ?? TurboStatus.Stopped with
         {
-            Detail = currentIp is null ? result.Detail : $"{currentIp} / {result.Detail}",
+            Detail = backendIp is null ? result.Detail : $"{backendIp} / {result.Detail}",
             Latency = result.Latency,
             LastChecked = checkedAt,
         });
         await AppLogger.InfoAsync($"{provider.Descriptor.Title} network test: {(result.Success ? "success" : "failed")}.");
-    }
-
-    async Task<Dictionary<string, string>> ResolvePlatformIpsAsync(
-        IPlatformProvider provider,
-        IReadOnlyDictionary<string, string> previousIps,
-        IProgress<PlatformProgressEventArgs>? progress = null)
-    {
-        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var domains = provider.Domains.Select(d => d.Domain).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var completedCount = 0;
-
-        var tasks = domains.Select(async domain =>
-        {
-            previousIps.TryGetValue(domain, out var previousIp);
-            var result = await SelectBestIpAsync(domain, previousIp);
-            if (result is not null)
-            {
-                lock (dict)
-                {
-                    dict[domain] = result.Ip;
-                }
-            }
-            var counted = Interlocked.Increment(ref completedCount);
-            progress?.Report(new(provider.Descriptor.Id, $"正在探测 {domain}… ({counted}/{domains.Length})",
-                (int)((double)counted / domains.Length * 80), 100));
-        });
-
-        await Task.WhenAll(tasks);
-        return dict;
     }
 
     internal static async Task<IpSelectionResult?> SelectBestIpAsync(string domain, string? previousIp)
@@ -352,11 +421,9 @@ public sealed class AppController : IDisposable
             return null;
         }
 
-        // Pick best by composite score, prefer existing IP if close
         var ranked = scores.OrderByDescending(s => s.CompositeScore).ToList();
         var best = ranked.First();
 
-        // Hysteresis: keep existing IP if it's within 80% of best score
         if (previousIp is not null)
         {
             var existing = ranked.FirstOrDefault(s => s.Ip == previousIp);
@@ -375,10 +442,8 @@ public sealed class AppController : IDisposable
         await DnsResolutionGate.WaitAsync();
         try
         {
-            // 1. Community IP library (crowd-validated, updated frequently)
             var communityIps = await ResolveViaCommunityAsync(domain);
 
-            // 2. Local DNS resolution (system DNS + DoH)
             var sourceTasks = new List<Task<IReadOnlyList<ResolvedIpCandidate>>>
             {
                 ResolveViaSystemDnsAsync(domain),
@@ -386,12 +451,10 @@ public sealed class AppController : IDisposable
             sourceTasks.AddRange(DohEndpoints.Select(endpoint => ResolveViaDohSourceAsync(domain, endpoint)));
             var sourceResults = (await Task.WhenAll(sourceTasks)).ToList();
 
-            // 3. Previous IP (hysteresis: keep working IPs)
             if (!string.IsNullOrWhiteSpace(previousIp) && IPAddress.TryParse(previousIp, out var address)
                 && (IpAddressHelpers.IsUsablePublicIpv4(address) || IsUsablePublicIpv6(address)))
                 sourceResults.Insert(0, [new ResolvedIpCandidate(previousIp, "Existing hosts")]);
 
-            // 4. Community IPs get priority as they're crowd-validated
             if (communityIps.Count > 0)
                 sourceResults.Insert(0, communityIps);
 
@@ -438,7 +501,6 @@ public sealed class AppController : IDisposable
             if (cached is not null)
                 return cached;
 
-            // Fetch the full list once for all domains the app manages, then cache the task.
             var allDomains = PlatformProviders.All
                 .SelectMany(p => p.Domains.Select(d => d.Domain))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -456,7 +518,6 @@ public sealed class AppController : IDisposable
         }
         catch
         {
-            // Clear the cached task so a later attempt can retry instead of being permanently stuck.
             lock (_communityCacheLock)
             {
                 _communityCacheTask = null;
@@ -500,7 +561,7 @@ public sealed class AppController : IDisposable
     {
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
             var ips = await ResolveViaDohAsync(domain, endpoint.Template, cts.Token);
             return ips.Select(ip => new ResolvedIpCandidate(ip, endpoint.Name)).ToArray();
         }
@@ -511,13 +572,13 @@ public sealed class AppController : IDisposable
         }
     }
 
+    // Domestic resolvers only: Cloudflare/Google DoH are unreliable on mainland networks.
     static readonly DohEndpoint[] DohEndpoints =
     [
-        new("Cloudflare DoH", "https://cloudflare-dns.com/dns-query?name={0}&type=A"),
-        new("Cloudflare DoH (AAAA)", "https://cloudflare-dns.com/dns-query?name={0}&type=AAAA"),
-        new("Google DoH", "https://dns.google/resolve?name={0}&type=A"),
-        new("Google DoH (AAAA)", "https://dns.google/resolve?name={0}&type=AAAA"),
-        new("Tencent DoH", "https://doh.pub/dns-query?name={0}&type=A"),
+        new("DNSPod DoH", "https://doh.pub/dns-query?name={0}&type=A"),
+        new("DNSPod DoH (AAAA)", "https://doh.pub/dns-query?name={0}&type=AAAA"),
+        new("AliDNS", "https://dns.alidns.com/resolve?name={0}&type=A"),
+        new("AliDNS (AAAA)", "https://dns.alidns.com/resolve?name={0}&type=AAAA"),
     ];
 
     static async Task<IReadOnlyList<string>> ResolveViaDohAsync(string domain, string endpoint, CancellationToken cancellationToken)
@@ -551,20 +612,8 @@ public sealed class AppController : IDisposable
 
     static bool IsUsablePublicIpv4(IPAddress address) => IpAddressHelpers.IsUsablePublicIpv4(address);
 
-    static Dictionary<string, string> MergeWithPreviousIps(
-        IPlatformProvider provider,
-        IReadOnlyDictionary<string, string> scannedIps,
-        IReadOnlyDictionary<string, string> previousIps)
-    {
-        var merged = scannedIps.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
-        foreach (var domain in provider.Domains.Select(x => x.Domain).Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (!merged.ContainsKey(domain) && previousIps.TryGetValue(domain, out var previousIp))
-                merged[domain] = previousIp;
-        }
-
-        return merged;
-    }
+    static TurboStatus BuildRunningStatus(IPlatformProvider provider, string detail)
+        => new(true, $"{provider.Descriptor.Title} 加速已开启", detail, "本地代理", "未检测", "可执行网络检测以验证连通性。");
 
     static TurboStatus BuildConflictStatus(IPlatformProvider provider, IReadOnlyList<HostsConflictEntry> conflicts)
     {
@@ -578,25 +627,6 @@ public sealed class AppController : IDisposable
         return new TurboStatus(false, "存在 hosts 冲突", detail, "需处理", "未检测", "可清理冲突后重新检测。");
     }
 
-    void RefreshPlatformStatusesFromHosts()
-    {
-        foreach (var provider in PlatformProviders.All)
-        {
-            var conflicts = HostsFileService.FindConflictingEntries(provider);
-            if (conflicts.Count > 0)
-            {
-                UpdatePlatform(provider.Descriptor.Id, BuildConflictStatus(provider, conflicts));
-                continue;
-            }
-
-            var hasEntries = HostsFileService.HasEntries(provider.Descriptor.Id);
-            var status = hasEntries
-                ? new TurboStatus(true, $"{provider.Descriptor.Title} 加速已开启", "hosts 文件已写入加速条目。", "已修改", "未检测", "可执行网络检测以验证连通性。")
-                : TurboStatus.Stopped;
-            UpdatePlatform(provider.Descriptor.Id, status);
-        }
-    }
-
     void UpdatePlatform(string platformId, TurboStatus status)
     {
         platformStatuses[platformId] = status;
@@ -605,14 +635,22 @@ public sealed class AppController : IDisposable
 
     public void Dispose()
     {
+        try
+        {
+            _proxyServer.StopAsync().GetAwaiter().GetResult();
+        }
+        catch { }
+        _proxyServer.Dispose();
+        _certManager.Dispose();
         _refreshService.Dispose();
+        _proxyLock.Dispose();
         HostsFileLock.Dispose();
     }
 }
 
 public sealed record TurboStatus(bool IsRunning, string Title, string Detail, string SystemProxy, string Latency, string LastChecked)
 {
-    public static readonly TurboStatus Stopped = new(false, "未启动", "点击启动后，将修改 hosts 文件加速访问。", "未修改", "未检测", "尚未执行网络检测。");
+    public static readonly TurboStatus Stopped = new(false, "未启动", "点击启动后，将通过本地代理加速访问。", "未修改", "未检测", "尚未执行网络检测。");
 }
 
 public sealed record DomainDiagnosticResult(string Host, string CurrentIp, bool Success, string Latency, string Detail);
