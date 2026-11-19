@@ -9,6 +9,7 @@ public sealed class CertificateManager : IDisposable
 {
     const string CaPassword = "GitHubTurbo";
     const string CaSubject = "CN=GitHubTurbo Root CA, O=GitHubTurbo, OU=Network Acceleration";
+    const int MaxCachedCertificates = 512;
 
     readonly ConcurrentDictionary<string, X509Certificate2> _domainCerts = new(StringComparer.OrdinalIgnoreCase);
     readonly string _pfxPath;
@@ -76,6 +77,14 @@ public sealed class CertificateManager : IDisposable
     {
         if (string.IsNullOrWhiteSpace(domain))
             domain = "github.com";
+
+        if (_domainCerts.TryGetValue(domain, out var existing))
+            return existing;
+
+        // Arbitrary SNI names must not grow the cache without bound. Rare overflow
+        // certs are generated uncached and reclaimed by the GC after the handshake.
+        if (_domainCerts.Count >= MaxCachedCertificates)
+            return CreateServerCert(domain);
 
         return _domainCerts.GetOrAdd(domain, CreateServerCert);
     }

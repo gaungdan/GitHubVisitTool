@@ -10,9 +10,9 @@ public enum TlsSniMode
     RealDomain,
 
     /// <summary>
-    /// SNI = the destination IP. Typical Fastly/GitHub bypass.
-    /// Note: .NET SslStream omits IP literals from the SNI extension, so this
-    /// degrades to <see cref="None"/> on the wire — still useful as a first attempt.
+    /// SNI = the destination IP. Kept for diagnostics/back-compat only.
+    /// .NET SslStream omits IP literals from the SNI extension, so on the wire
+    /// this is identical to <see cref="None"/>; it is not part of the retry order.
     /// </summary>
     IpAddress,
 
@@ -24,7 +24,6 @@ public static class TlsSniHelper
 {
     public static readonly TlsSniMode[] PreferredOrder =
     [
-        TlsSniMode.IpAddress,
         TlsSniMode.None,
         TlsSniMode.RealDomain,
     ];

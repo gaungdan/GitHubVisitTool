@@ -33,6 +33,7 @@ public sealed class AppController : IDisposable
     public AppController()
     {
         _proxyServer = new MitmProxyServer(_certManager, _endpointCache);
+        _refreshService = new IpRefreshService(_endpointCache);
     }
 
     public string? GetBackendIp(string domain) => _endpointCache.Describe(domain);
@@ -41,7 +42,6 @@ public sealed class AppController : IDisposable
     {
         AppPaths.EnsureDirectories();
         settings = await AppSettings.LoadAsync();
-        _refreshService = new IpRefreshService(_endpointCache);
         await AppLogger.InfoAsync("GitHub Turbo started.");
 
         var needProxy = false;
@@ -145,9 +145,15 @@ public sealed class AppController : IDisposable
                 $"已指向本地代理（127.0.0.1），共 {domains.Length} 个域名。"));
             await AppLogger.InfoAsync($"{provider.Descriptor.Title} MITM acceleration enabled.");
 
-            // Warm the endpoint cache so the first browser hit is fast and the UI can show real IPs.
+            // Warm the primary domains so the first browser hit is fast; the rest
+            // are filled in the background while diagnostics run.
             progress?.Report(new(platformId, $"正在为 {provider.Descriptor.Title} 优选出口 IP…", 25, 100));
-            await WarmupEndpointsAsync(platformId, domains, progress);
+            var priorityDomains = domains.Take(3).ToArray();
+            await WarmupEndpointsAsync(platformId, priorityDomains, progress);
+
+            var remainingDomains = domains.Skip(priorityDomains.Length).ToArray();
+            if (remainingDomains.Length > 0)
+                _ = Task.Run(() => WarmupEndpointsAsync(platformId, remainingDomains, null));
 
             progress?.Report(new(platformId, $"正在检测 {provider.Descriptor.Title} 网络连通性…", 92, 100));
             await RunDiagnosticsCoreAsync(platformId, progress);
@@ -434,7 +440,11 @@ public sealed class AppController : IDisposable
         }
 
         await AppLogger.InfoAsync($"Selected {best.Ip} for {domain} (score {best.CompositeScore:F1}/100) | {best.Summary}");
-        return new IpSelectionResult(domain, best.Ip, ranked.First().Ip == best.Ip ? "Multi-dim best" : "Multi-dim (kept existing)", $"{best.CompositeScore:F0}");
+        var rankedIps = ranked.Select(s => s.Ip)
+            .Concat(candidates.Select(c => c.Ip))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return new IpSelectionResult(domain, best.Ip, ranked.First().Ip == best.Ip ? "Multi-dim best" : "Multi-dim (kept existing)", $"{best.CompositeScore:F0}", rankedIps);
     }
 
     internal static async Task<IReadOnlyList<ResolvedIpCandidate>> ResolveCandidatesAsync(string domain, string? previousIp)
@@ -452,7 +462,7 @@ public sealed class AppController : IDisposable
             var sourceResults = (await Task.WhenAll(sourceTasks)).ToList();
 
             if (!string.IsNullOrWhiteSpace(previousIp) && IPAddress.TryParse(previousIp, out var address)
-                && (IpAddressHelpers.IsUsablePublicIpv4(address) || IsUsablePublicIpv6(address)))
+                && (IpAddressHelpers.IsUsablePublicIpv4(address) || IpAddressHelpers.IsUsablePublicIpv6(address)))
                 sourceResults.Insert(0, [new ResolvedIpCandidate(previousIp, "Existing hosts")]);
 
             if (communityIps.Count > 0)
@@ -534,7 +544,7 @@ public sealed class AppController : IDisposable
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
             var addresses = await Dns.GetHostAddressesAsync(domain, cts.Token);
             return addresses
-                .Where(a => IpAddressHelpers.IsUsablePublicIpv4(a) || IsUsablePublicIpv6(a))
+                .Where(a => IpAddressHelpers.IsUsablePublicIpv4(a) || IpAddressHelpers.IsUsablePublicIpv6(a))
                 .Select(address => new ResolvedIpCandidate(address.ToString(),
                     address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? "System DNS (IPv6)" : "System DNS"))
                 .DistinctBy(x => x.Ip, StringComparer.OrdinalIgnoreCase)
@@ -545,16 +555,6 @@ public sealed class AppController : IDisposable
             await AppLogger.ErrorAsync($"System DNS failed for {domain}: {ex.GetType().Name}: {ex.Message}");
             return [];
         }
-    }
-
-    static bool IsUsablePublicIpv6(IPAddress address)
-    {
-        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6) return false;
-        if (address.IsIPv6LinkLocal || address.IsIPv6SiteLocal) return false;
-        if (address.Equals(IPAddress.IPv6Loopback)) return false;
-        var bytes = address.GetAddressBytes();
-        if (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0d && bytes[3] == 0xb8) return false;
-        return true;
     }
 
     static async Task<IReadOnlyList<ResolvedIpCandidate>> ResolveViaDohSourceAsync(string domain, DohEndpoint endpoint)
@@ -601,7 +601,7 @@ public sealed class AppController : IDisposable
                 {
                     var ip = data.GetString();
                     if (!string.IsNullOrEmpty(ip) && IPAddress.TryParse(ip, out var addr) &&
-                        (IsUsablePublicIpv4(addr) || IsUsablePublicIpv6(addr)))
+                        (IpAddressHelpers.IsUsablePublicIpv4(addr) || IpAddressHelpers.IsUsablePublicIpv6(addr)))
                         ips.Add(ip);
                 }
             }
@@ -609,8 +609,6 @@ public sealed class AppController : IDisposable
 
         return ips;
     }
-
-    static bool IsUsablePublicIpv4(IPAddress address) => IpAddressHelpers.IsUsablePublicIpv4(address);
 
     static TurboStatus BuildRunningStatus(IPlatformProvider provider, string detail)
         => new(true, $"{provider.Descriptor.Title} 加速已开启", detail, "本地代理", "未检测", "可执行网络检测以验证连通性。");
@@ -644,7 +642,6 @@ public sealed class AppController : IDisposable
         _certManager.Dispose();
         _refreshService.Dispose();
         _proxyLock.Dispose();
-        HostsFileLock.Dispose();
     }
 }
 
@@ -661,7 +658,7 @@ sealed record DohEndpoint(string Name, string Template);
 
 public sealed record ResolvedIpCandidate(string Ip, string Source);
 
-sealed record IpSelectionResult(string Domain, string Ip, string Source, string Latency);
+sealed record IpSelectionResult(string Domain, string Ip, string Source, string Latency, IReadOnlyList<string> RankedIps);
 
 public sealed record PlatformProgressEventArgs(
     string PlatformId,

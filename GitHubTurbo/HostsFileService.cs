@@ -24,8 +24,11 @@ public static class HostsFileService
                 return false;
 
             var content = File.ReadAllText(HostsPath, NoBomUtf8);
-            return content.Contains(LegacyMarkEnd, StringComparison.OrdinalIgnoreCase) ||
-                PlatformProviders.All.Any(p => content.Contains(GetMarkerEnd(p.Descriptor.Id), StringComparison.OrdinalIgnoreCase));
+            return content.Contains(LegacyMarkStart, StringComparison.OrdinalIgnoreCase) ||
+                content.Contains(LegacyMarkEnd, StringComparison.OrdinalIgnoreCase) ||
+                PlatformProviders.All.Any(p =>
+                    content.Contains(GetMarkerStart(p.Descriptor.Id), StringComparison.OrdinalIgnoreCase) ||
+                    content.Contains(GetMarkerEnd(p.Descriptor.Id), StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -284,12 +287,13 @@ public static class HostsFileService
         catch { }
     }
 
-    static IReadOnlyList<string> BuildWithPlatformBlock(
+    internal static IReadOnlyList<string> BuildWithPlatformBlock(
         IReadOnlyList<string> existing,
         string platformId,
         IReadOnlyDictionary<string, string> domainToIp)
     {
-        var result = RemovePlatformBlock(existing, platformId).ToList();
+        var domainsToReplace = domainToIp.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var result = RemovePlatformBlock(RemoveDomainsFromLegacyBlock(existing, domainsToReplace), platformId).ToList();
         if (result.Count > 0 && !string.IsNullOrWhiteSpace(result[^1]))
             result.Add(string.Empty);
 
@@ -298,6 +302,72 @@ public static class HostsFileService
             result.Add($"{kv.Value} {kv.Key}");
         result.Add(GetMarkerEnd(platformId));
         return result;
+    }
+
+    /// <summary>
+    /// Drops legacy-block entries for the domains being rewritten while leaving
+    /// unrelated legacy entries inside their markers, so later migrations still find them.
+    /// </summary>
+    internal static IReadOnlyList<string> RemoveDomainsFromLegacyBlock(
+        IReadOnlyList<string> existing,
+        IReadOnlySet<string> domains)
+    {
+        var result = new List<string>();
+        var legacyEntries = new List<string>();
+        var inLegacyBlock = false;
+
+        foreach (var line in existing)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Equals(LegacyMarkStart, StringComparison.OrdinalIgnoreCase))
+            {
+                inLegacyBlock = true;
+                legacyEntries.Clear();
+                continue;
+            }
+
+            if (trimmed.Equals(LegacyMarkEnd, StringComparison.OrdinalIgnoreCase))
+            {
+                inLegacyBlock = false;
+                if (legacyEntries.Count > 0)
+                {
+                    result.Add(LegacyMarkStart);
+                    result.AddRange(legacyEntries);
+                    result.Add(LegacyMarkEnd);
+                }
+                continue;
+            }
+
+            if (!inLegacyBlock)
+            {
+                result.Add(line);
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
+                continue;
+
+            var parts = trimmed.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+                continue;
+
+            var remainingHosts = parts.Skip(1)
+                .Where(host => !domains.Contains(host))
+                .ToArray();
+            if (remainingHosts.Length == 0)
+                continue;
+
+            legacyEntries.Add($"{parts[0]} {string.Join(' ', remainingHosts)}");
+        }
+
+        if (inLegacyBlock && legacyEntries.Count > 0)
+        {
+            result.Add(LegacyMarkStart);
+            result.AddRange(legacyEntries);
+            result.Add(LegacyMarkEnd);
+        }
+
+        return TrimExtraBlankLines(result);
     }
 
     static IReadOnlyList<string> RemovePlatformBlock(IReadOnlyList<string> existing, string platformId)

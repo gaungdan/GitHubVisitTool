@@ -21,7 +21,7 @@ public sealed class EndpointCache
         => _entries.TryGetValue(domain, out var entry) && !entry.IsStale ? entry.Ips : null;
 
     public TlsSniMode GetPreferredSni(string domain)
-        => _preferredSni.TryGetValue(domain, out var mode) ? mode : TlsSniMode.IpAddress;
+        => _preferredSni.TryGetValue(domain, out var mode) ? mode : TlsSniMode.None;
 
     public void RememberSni(string domain, TlsSniMode mode)
         => _preferredSni[domain] = mode;
@@ -50,9 +50,7 @@ public sealed class EndpointCache
             if (result is null)
                 return;
 
-            var candidates = await AppController.ResolveCandidatesAsync(domain, result.Ip);
-            var ips = candidates
-                .Select(c => c.Ip)
+            var ips = result.RankedIps
                 .Where(ip => !string.Equals(ip, result.Ip, StringComparison.OrdinalIgnoreCase))
                 .Prepend(result.Ip)
                 .Distinct(StringComparer.OrdinalIgnoreCase)

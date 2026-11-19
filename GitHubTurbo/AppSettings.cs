@@ -12,9 +12,7 @@ public sealed class AppSettings
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    readonly List<string> _enabledPlatforms = new();
-
-    public IReadOnlyList<string> EnabledPlatforms => _enabledPlatforms;
+    public List<string> EnabledPlatforms { get; set; } = new();
 
     public bool AutoRefreshOnLaunch { get; set; }
 
@@ -31,7 +29,9 @@ public sealed class AppSettings
             }
 
             await using var stream = File.OpenRead(AppPaths.SettingsPath);
-            return await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions) ?? new AppSettings();
+            var loaded = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions) ?? new AppSettings();
+            loaded.EnabledPlatforms ??= new List<string>();
+            return loaded;
         }
         catch (Exception ex)
         {
@@ -61,9 +61,9 @@ public sealed class AppSettings
 
     public void SetPlatformEnabled(string platformId, bool enabled)
     {
-        _enabledPlatforms.RemoveAll(x => x.Equals(platformId, StringComparison.OrdinalIgnoreCase));
+        EnabledPlatforms.RemoveAll(x => x.Equals(platformId, StringComparison.OrdinalIgnoreCase));
 
         if (enabled)
-            _enabledPlatforms.Add(platformId);
+            EnabledPlatforms.Add(platformId);
     }
 }

@@ -21,12 +21,15 @@ public sealed class MitmProxyServer : IDisposable
     public const int HttpsPort = 443;
     public const int HttpPort = 80;
 
+    const int MaxConcurrentConnections = 512;
+
     readonly CertificateManager _certManager;
     readonly EndpointCache _endpointCache;
+    readonly SemaphoreSlim _connectionGate = new(MaxConcurrentConnections, MaxConcurrentConnections);
     readonly int _listenHttpsPort;
     readonly int _listenHttpPort;
     readonly int _upstreamHttpsPort;
-    readonly CancellationTokenSource _cts = new();
+    CancellationTokenSource? _cts;
     TcpListener? _httpsListener;
     TcpListener? _httpListener;
     Task? _httpsLoop;
@@ -34,8 +37,6 @@ public sealed class MitmProxyServer : IDisposable
     int _isRunning;
 
     public bool IsRunning => Volatile.Read(ref _isRunning) == 1;
-
-    public EndpointCache Endpoints => _endpointCache;
 
     public MitmProxyServer(
         CertificateManager certManager,
@@ -56,17 +57,54 @@ public sealed class MitmProxyServer : IDisposable
         if (Interlocked.CompareExchange(ref _isRunning, 1, 0) == 1)
             return;
 
-        if (requireTrustedRoot && !_certManager.IsRootTrusted() && !_certManager.TrustRootCertificate())
-            throw new InvalidOperationException("无法信任本地根证书，请以管理员身份运行。");
+        var cts = new CancellationTokenSource();
+        TcpListener? httpsListener = null;
+        TcpListener? httpListener = null;
+        try
+        {
+            if (requireTrustedRoot && !_certManager.IsRootTrusted() && !_certManager.TrustRootCertificate())
+                throw new InvalidOperationException("无法信任本地根证书，请以管理员身份运行。");
 
-        _httpsListener = new TcpListener(IPAddress.Loopback, _listenHttpsPort);
-        _httpsListener.Start(256);
-        _httpListener = new TcpListener(IPAddress.Loopback, _listenHttpPort);
-        _httpListener.Start(64);
+            httpsListener = new TcpListener(IPAddress.Loopback, _listenHttpsPort);
+            httpsListener.Start(256);
 
-        _httpsLoop = Task.Run(() => AcceptLoopAsync(_httpsListener, handleHttpAsync: false, _cts.Token));
-        _httpLoop = Task.Run(() => AcceptLoopAsync(_httpListener, handleHttpAsync: true, _cts.Token));
-        _ = AppLogger.InfoAsync($"MITM proxy listening on 127.0.0.1:{_listenHttpsPort}/{_listenHttpPort}.");
+            try
+            {
+                httpListener = new TcpListener(IPAddress.Loopback, _listenHttpPort);
+                httpListener.Start(64);
+            }
+            catch (Exception ex)
+            {
+                // Port 80 only serves the HTTPS redirect; losing it must not block acceleration.
+                httpListener = null;
+                _ = AppLogger.ErrorAsync($"MITM http listener unavailable on 127.0.0.1:{_listenHttpPort}; continuing HTTPS-only: {ex.GetType().Name}: {ex.Message}");
+            }
+
+            _httpsListener = httpsListener;
+            _httpListener = httpListener;
+            _cts = cts;
+
+            _httpsLoop = Task.Run(() => AcceptLoopAsync(httpsListener, handleHttpAsync: false, cts.Token));
+            var http = httpListener;
+            _httpLoop = http is null ? null : Task.Run(() => AcceptLoopAsync(http, handleHttpAsync: true, cts.Token));
+
+            _ = AppLogger.InfoAsync(http is null
+                ? $"MITM proxy listening on 127.0.0.1:{_listenHttpsPort} (HTTPS only)."
+                : $"MITM proxy listening on 127.0.0.1:{_listenHttpsPort}/{_listenHttpPort}.");
+        }
+        catch
+        {
+            Volatile.Write(ref _isRunning, 0);
+            try { httpsListener?.Stop(); } catch { }
+            try { httpListener?.Stop(); } catch { }
+            _httpsListener = null;
+            _httpListener = null;
+            _httpsLoop = null;
+            _httpLoop = null;
+            _cts = null;
+            cts.Dispose();
+            throw;
+        }
     }
 
     public async Task StopAsync()
@@ -74,20 +112,34 @@ public sealed class MitmProxyServer : IDisposable
         if (Interlocked.Exchange(ref _isRunning, 0) == 0)
             return;
 
-        _cts.Cancel();
+        var cts = Interlocked.Exchange(ref _cts, null);
+        var httpsLoop = _httpsLoop;
+        var httpLoop = _httpLoop;
+        _httpsLoop = null;
+        _httpLoop = null;
+
+        cts?.Cancel();
+        StopListeners();
+
+        if (httpsLoop is not null)
+        {
+            try { await httpsLoop; } catch { }
+        }
+        if (httpLoop is not null)
+        {
+            try { await httpLoop; } catch { }
+        }
+
+        cts?.Dispose();
+        await AppLogger.InfoAsync("MITM proxy stopped.");
+    }
+
+    void StopListeners()
+    {
         try { _httpsListener?.Stop(); } catch { }
         try { _httpListener?.Stop(); } catch { }
-
-        if (_httpsLoop is not null)
-        {
-            try { await _httpsLoop; } catch { }
-        }
-        if (_httpLoop is not null)
-        {
-            try { await _httpLoop; } catch { }
-        }
-
-        await AppLogger.InfoAsync("MITM proxy stopped.");
+        _httpsListener = null;
+        _httpListener = null;
     }
 
     async Task AcceptLoopAsync(TcpListener listener, bool handleHttpAsync, CancellationToken cancellationToken)
@@ -110,9 +162,32 @@ public sealed class MitmProxyServer : IDisposable
                 continue;
             }
 
-            _ = handleHttpAsync
-                ? HandleHttpAsync(client, cancellationToken)
-                : HandleHttpsAsync(client, cancellationToken);
+            _ = HandleClientAsync(client, handleHttpAsync, cancellationToken);
+        }
+    }
+
+    async Task HandleClientAsync(TcpClient client, bool handleHttpAsync, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _connectionGate.WaitAsync(cancellationToken);
+        }
+        catch
+        {
+            client.Dispose();
+            return;
+        }
+
+        try
+        {
+            if (handleHttpAsync)
+                await HandleHttpAsync(client, cancellationToken);
+            else
+                await HandleHttpsAsync(client, cancellationToken);
+        }
+        finally
+        {
+            _connectionGate.Release();
         }
     }
 
@@ -122,6 +197,7 @@ public sealed class MitmProxyServer : IDisposable
         try
         {
             client.NoDelay = true;
+            client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
             await using var clientStream = client.GetStream();
             await using var serverSsl = new SslStream(clientStream, leaveInnerStreamOpen: true);
             var serverOptions = new SslServerAuthenticationOptions
@@ -174,6 +250,7 @@ public sealed class MitmProxyServer : IDisposable
         try
         {
             client.NoDelay = true;
+            client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
             using var clientStream = client.GetStream();
 
             // Read just enough of the request to learn the Host, then 301 to HTTPS.
@@ -261,6 +338,7 @@ public sealed class MitmProxyServer : IDisposable
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(3));
 
             socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
             await socket.ConnectAsync(IPAddress.Parse(ip), _upstreamHttpsPort, timeoutCts.Token);
             var networkStream = new NetworkStream(socket, ownsSocket: true);
 
@@ -367,7 +445,14 @@ public sealed class MitmProxyServer : IDisposable
         return parts.Length >= 2 && parts[1].StartsWith('/') ? parts[1] : "/";
     }
 
-    public void Dispose() => _cts.Dispose();
+    public void Dispose()
+    {
+        Interlocked.Exchange(ref _isRunning, 0);
+        var cts = Interlocked.Exchange(ref _cts, null);
+        cts?.Cancel();
+        cts?.Dispose();
+        StopListeners();
+    }
 
     sealed record OutboundConnection(string Ip, TlsSniMode SniMode, SslStream Stream) : IAsyncDisposable
     {

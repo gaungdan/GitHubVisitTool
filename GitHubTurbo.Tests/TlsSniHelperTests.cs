@@ -22,16 +22,15 @@ public sealed class TlsSniHelperTests
     }
 
     [Fact]
-    public void PreferredOrder_PutsIpAddressFirst()
+    public void PreferredOrder_PutsNoSniFirst()
     {
-        Assert.Equal(TlsSniMode.IpAddress, TlsSniHelper.PreferredOrder[0]);
-        Assert.Equal(TlsSniMode.None, TlsSniHelper.PreferredOrder[1]);
-        Assert.Equal(TlsSniMode.RealDomain, TlsSniHelper.PreferredOrder[2]);
+        Assert.Equal(TlsSniMode.None, TlsSniHelper.PreferredOrder[0]);
+        Assert.Equal(TlsSniMode.RealDomain, TlsSniHelper.PreferredOrder[1]);
     }
 
     [Fact]
-    public void PreferredOrder_ContainsAllModesExactlyOnce()
-        => Assert.Equal(3, TlsSniHelper.PreferredOrder.Distinct().Count());
+    public void PreferredOrder_ContainsEachRetryModeOnce()
+        => Assert.Equal(2, TlsSniHelper.PreferredOrder.Distinct().Count());
 }
 
 public sealed class CertificateManagerTests : IDisposable
@@ -189,10 +188,10 @@ public sealed class EndpointCacheTests
     }
 
     [Fact]
-    public void GetPreferredSni_DefaultsToIpAddress()
+    public void GetPreferredSni_DefaultsToNone()
     {
         var cache = new EndpointCache();
-        Assert.Equal(TlsSniMode.IpAddress, cache.GetPreferredSni("github.com"));
+        Assert.Equal(TlsSniMode.None, cache.GetPreferredSni("github.com"));
     }
 
     [Fact]
@@ -211,7 +210,7 @@ public sealed class EndpointCacheTests
     {
         var cache = new EndpointCache();
         cache.RememberSni("github.com", TlsSniMode.None);
-        Assert.Equal(TlsSniMode.IpAddress, cache.GetPreferredSni("api.github.com"));
+        Assert.Equal(TlsSniMode.None, cache.GetPreferredSni("api.github.com"));
         Assert.Equal(TlsSniMode.None, cache.GetPreferredSni("github.com"));
     }
 

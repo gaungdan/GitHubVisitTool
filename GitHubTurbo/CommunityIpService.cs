@@ -141,7 +141,7 @@ public static class CommunityIpService
                 continue;
 
             // Only public IPs
-            if (!IpAddressHelpers.IsUsablePublicIpv4(address) && !IsUsablePublicIpv6(address))
+            if (!IpAddressHelpers.IsUsablePublicIpv4(address) && !IpAddressHelpers.IsUsablePublicIpv6(address))
                 continue;
 
             foreach (var host in parts.Skip(1))
@@ -158,21 +158,6 @@ public static class CommunityIpService
         }
 
         return entries;
-    }
-
-    static bool IsUsablePublicIpv6(System.Net.IPAddress address)
-    {
-        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6)
-            return false;
-        if (address.IsIPv6LinkLocal || address.IsIPv6SiteLocal)
-            return false;
-        if (address.Equals(System.Net.IPAddress.IPv6Loopback))
-            return false;
-        // Check for documentation prefix (2001:db8::/32)
-        var bytes = address.GetAddressBytes();
-        if (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0d && bytes[3] == 0xb8)
-            return false;
-        return true;
     }
 }
 

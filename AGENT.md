@@ -8,7 +8,7 @@ GitHub Turbo is a Windows-only WPF desktop application that accelerates access t
 
 - **Framework**: .NET 8.0 (`net8.0-windows`), C# 12, nullable + implicit usings
 - **UI**: WPF (MVVM) plus Windows Forms `NotifyIcon` for the tray
-- **Tests**: xUnit (`GitHubTurbo.Tests`), currently 47 tests
+- **Tests**: xUnit (`GitHubTurbo.Tests`), currently 59 tests
 - **Dependencies**: application has **no NuGet package references**; BCL only
 - **Deployment**: self-contained, single-file, ReadyToRun, `win-x64`
 - **Requires Administrator**: hosts writes, binding :443/:80, installing the root CA
@@ -97,6 +97,7 @@ Launcher alternative: `Start-GitHubTurbo.ps1 [-Configuration Release] [-NoBuild]
 - `AppController` is created directly (no DI container); `InitializeAsync()` runs before the window opens.
 - WinForms `NotifyIcon` provides show/start-all/stop-all/exit; the tray menu is the only way to truly exit.
 - Closing `MainWindow` cancels close and hides it; `App.Exit()` sets `_isShuttingDown` and shuts down.
+- `OnExit` removes all managed hosts blocks before the proxy dies, so a normal exit never leaves domains pointed at a closed loopback port. This cleanup is skipped for a second instance (which never owns the controller).
 - `InitializeAsync` scans each platform: external hosts conflicts → conflict status; legacy non-loopback entries → "需刷新"; existing loopback entries → start the proxy; then auto-starts platforms listed in `settings.EnabledPlatforms` when `AutoRefreshOnLaunch` is set.
 
 ### Controller (`AppController.cs`)
@@ -109,13 +110,14 @@ Launcher alternative: `Start-GitHubTurbo.ps1 [-Configuration Release] [-NoBuild]
 
 ### Proxy (`Proxy/`)
 
-- `MitmProxyServer` binds `127.0.0.1:443` (backlog 256) and `127.0.0.1:80` (backlog 64) with raw `TcpListener`.
+- `MitmProxyServer` binds `127.0.0.1:443` (backlog 256) and, when available, `127.0.0.1:80` (backlog 64) with raw `TcpListener`. Port 80 is optional: if it is taken, the proxy logs a warning and continues HTTPS-only. Start/stop is restartable (fresh `CancellationTokenSource` per run) and rolls back state if binding fails.
+- Inbound connections are capped at 512 concurrently; TCP keepalive is enabled on both inbound and outbound sockets.
 - HTTPS: server TLS with ALPN `h2, http/1.1`; `ServerCertificateSelectionCallback` selects a leaf cert by SNI; 8 s handshake timeout. It never parses HTTP — bytes are piped both ways (64 KB buffer), so HTTP/2, WebSocket, and large downloads work.
 - HTTP :80 only reads the request line far enough to find `Host` and replies `301` to `https://...`.
-- Outbound: fetch ranked IP list from `EndpointCache`, try SNI modes in `TlsSniHelper.PreferredOrder` (`IpAddress` → `None` → `RealDomain`), starting with the previously successful mode; 5 candidate IPs are dialed concurrently per mode with a 3 s timeout.
+- Outbound: fetch ranked IP list from `EndpointCache`, try SNI modes in `TlsSniHelper.PreferredOrder` (`None` → `RealDomain`), starting with the previously successful mode; 5 candidate IPs are dialed concurrently per mode with a 3 s timeout. `IpAddress` is retained for compatibility but excluded from the retry order because .NET omits IP literals from SNI anyway.
 - Outbound certificate validation is intentionally bypassed (fake SNI produces a name mismatch). Do not "fix" this without redesigning the strategy.
 - On upstream failure, write the 502 **inside** the TLS stream; plaintext would desync the client.
-- `CertificateManager` creates a 10-year root CA and 2-year leaf certs (RSA 2048, SAN = domain + loopback), stores them in `%LOCALAPPDATA%\GitHubTurbo\certs`, and installs the root into `LocalMachine\Root`.
+- `CertificateManager` creates a 10-year root CA and 2-year leaf certs (RSA 2048, SAN = domain + loopback), stores them in `%LOCALAPPDATA%\GitHubTurbo\certs`, and installs the root into `LocalMachine\Root`. The leaf-cert cache is capped at 512 entries; overflow SNI names are served uncached.
 - `EndpointCache` is in-memory only: top 5 ranked IPs, 30 min TTL, 2 s quick TCP probe on cold path, remembers preferred SNI mode per domain.
 
 ### IP resolution and scoring
@@ -123,13 +125,15 @@ Launcher alternative: `Start-GitHubTurbo.ps1 [-Configuration Release] [-NoBuild]
 - Candidate sources, in priority order: community hosts list (jsdelivr → fastly → raw.githubusercontent, 4 s timeout, merged with the embedded seed), previous IP, system DNS (2 s), DNSPod DoH A/AAAA, AliDNS DoH A/AAAA (1 s each).
 - `IpSelectionHelpers.Interleave` mixes sources round-robin up to 8 candidates.
 - Only public IPs are accepted: loopback, private, link-local, CGNAT, documentation, multicast, and reserved ranges are filtered. **Never** use system DNS results without this filter — with hosts pointing at `127.0.0.1` it creates a proxy → hosts → proxy loop.
-- `IpScoringService` probes ping (1 s), TCP 443 (2 s), and HTTP HEAD over TLS (2.5 s) concurrently; composite = ping 0.35 + TCP 0.35 + HTTP 0.30. A previous IP is kept when its score is at least 80% of the best.
+- `IpScoringService` probes ping (1 s), TCP 443 (2 s), and HTTP HEAD over TLS (2.5 s) concurrently; the HTTP probe uses the no-SNI outbound path. Composite = ping 0.35 + TCP 0.35 + HTTP 0.30. A previous IP is kept when its score is at least 80% of the best.
+- `StartPlatformAsync` synchronously warms the first 3 domains (primary/API/Gist) and finishes the remaining domains in a background task, so startup is not blocked by the full list.
 - `IpRefreshService` first fires after 5 min, then every 30 min; refreshes only platforms that currently have hosts entries.
 
 ### Hosts file management
 
 - `C:\Windows\System32\drivers\etc\hosts`, UTF-8 without BOM, max 50 MB.
 - Blocks are wrapped in `# {platformId} Start` / `# {platformId} End`; legacy single block uses `# GitHubTurbo Start` / `# GitHubTurbo End`.
+- Starting a platform removes its domains from the legacy block (preserving unrelated legacy entries inside the markers), so stale IPs cannot win resolution after migration.
 - `FindConflictingEntries` ignores lines inside any managed block and comment/blank lines, so Steam++ (or similar) entries outside our blocks surface as conflicts.
 - Writes are atomic: temp file in the same directory + `File.Replace`, followed by `ipconfig /flushdns` (5 s timeout). Read-only attribute is temporarily cleared and restored.
 - All mutations go through `HostsFileService` while holding `HostsFileLock`.

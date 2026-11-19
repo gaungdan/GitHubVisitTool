@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Net.Security;
+using GitHubTurbo.Proxy;
 
 namespace GitHubTurbo;
 
@@ -110,7 +111,8 @@ public static class IpScoringService
                 (_, _, _, _) => true); // Accept all certs for testing
             await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
-                TargetHost = domain,
+                // Mirror the proxy's preferred outbound path: no SNI.
+                TargetHost = TlsSniHelper.CreateTargetHost(domain, ip, TlsSniMode.None),
                 EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13
             }, timeoutCts.Token);
 

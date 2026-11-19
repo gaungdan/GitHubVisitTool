@@ -43,6 +43,16 @@ public sealed class IpSelectionHelpersTests
     public void IsUsablePublicIpv4_FiltersNonPublicRanges(string value, bool expected)
         => Assert.Equal(expected, IpAddressHelpers.IsUsablePublicIpv4(IPAddress.Parse(value)));
 
+    [Theory]
+    [InlineData("2606:4700:4700::1111", true)]
+    [InlineData("::1", false)]
+    [InlineData("fc00::1", false)]
+    [InlineData("fe80::1", false)]
+    [InlineData("2001:db8::1", false)]
+    [InlineData("::ffff:8.8.8.8", true)]
+    public void IsUsablePublicIpv6_FiltersNonPublicRanges(string value, bool expected)
+        => Assert.Equal(expected, IpAddressHelpers.IsUsablePublicIpv6(IPAddress.Parse(value)));
+
     static IReadOnlyList<ResolvedIpCandidate> Candidates(string source, params string[] ips)
         => ips.Select(ip => new ResolvedIpCandidate(ip, source)).ToArray();
 }

@@ -10,6 +10,21 @@ public static class IpAddressHelpers
         if (IPAddress.IsLoopback(address))
             return true;
 
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            if (address.IsIPv4MappedToIPv6)
+                return IsPrivateOrLoopback(address.MapToIPv4());
+
+            if (address.Equals(IPAddress.IPv6Any) || address.Equals(IPAddress.IPv6None))
+                return true;
+
+            if (address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6Multicast)
+                return true;
+
+            // fc00::/7 unique local addresses
+            return (address.GetAddressBytes()[0] & 0xFE) == 0xFC;
+        }
+
         if (address.AddressFamily != AddressFamily.InterNetwork)
             return false;
 
@@ -39,5 +54,27 @@ public static class IpAddressHelpers
             return false;
 
         return !IsPrivateOrLoopback(address);
+    }
+
+    public static bool IsUsablePublicIpv6(IPAddress address)
+    {
+        if (address.AddressFamily != AddressFamily.InterNetworkV6)
+            return false;
+
+        if (address.IsIPv4MappedToIPv6)
+            return IsUsablePublicIpv4(address.MapToIPv4());
+
+        if (address.Equals(IPAddress.IPv6Any) || address.Equals(IPAddress.IPv6None))
+            return false;
+
+        if (IsPrivateOrLoopback(address))
+            return false;
+
+        // 2001:db8::/32 documentation prefix
+        var bytes = address.GetAddressBytes();
+        if (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0d && bytes[3] == 0xb8)
+            return false;
+
+        return true;
     }
 }

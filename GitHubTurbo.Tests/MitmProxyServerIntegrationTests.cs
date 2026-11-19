@@ -95,7 +95,7 @@ public sealed class MitmProxyServerIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Https_IpAddressStrategyIsReceivedAsEmptySni()
+    public async Task Https_NoSniStrategyIsPreferredAndRemembered()
     {
         _endpoints.Seed("ip-sni.test", "127.0.0.1");
 
@@ -103,10 +103,8 @@ public sealed class MitmProxyServerIntegrationTests : IAsyncLifetime
             "GET / HTTP/1.1\r\nHost: ip-sni.test\r\nConnection: close\r\n\r\n");
 
         Assert.Contains("HTTP/1.1 200 OK", response);
-        // .NET omits IP literals from the ClientHello SNI extension, so the wire
-        // representation of TlsSniMode.IpAddress is "no SNI".
         Assert.Equal(TlsSniMode.None, _upstream.LastAcceptedSniMode);
-        Assert.Equal(TlsSniMode.IpAddress, _endpoints.GetPreferredSni("ip-sni.test"));
+        Assert.Equal(TlsSniMode.None, _endpoints.GetPreferredSni("ip-sni.test"));
     }
 
     [Fact]
@@ -144,6 +142,20 @@ public sealed class MitmProxyServerIntegrationTests : IAsyncLifetime
 
         Assert.Contains("HTTP/1.1 301 Moved Permanently", response);
         Assert.Contains("Location: https://example.com/foo/bar?x=1", response);
+    }
+
+    [Fact]
+    public async Task Https_ProxyCanRestartAfterStop()
+    {
+        await _proxy.StopAsync();
+        _proxy.Start(requireTrustedRoot: false);
+
+        _endpoints.Seed("restart.test", "127.0.0.1");
+        var response = await SendHttpsAsync("restart.test",
+            "GET /restart HTTP/1.1\r\nHost: restart.test\r\nConnection: close\r\n\r\n");
+
+        Assert.Contains("HTTP/1.1 200 OK", response);
+        Assert.Contains("upstream:restart.test", response);
     }
 
     [Fact]
