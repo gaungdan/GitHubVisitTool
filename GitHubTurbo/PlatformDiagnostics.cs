@@ -45,13 +45,30 @@ public static class PlatformDiagnostics
         "gitlab.io",
     };
 
+    static readonly HashSet<string> AntigravityCriticalDomains = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "antigravity.google",
+        "www.antigravity.google",
+        "app.antigravity.google",
+        "antigravity.withgoogle.com",
+        "codeassist.google",
+        "storage.googleapis.com",
+        "edgedl.me.gvt1.com",
+        "accounts.google.com",
+        "oauth2.googleapis.com",
+        "cloudcode-pa.googleapis.com",
+        "generativelanguage.googleapis.com",
+    };
+
     public static IReadOnlyList<PlatformDomain> GetDiagnosticDomains(IPlatformProvider provider)
     {
         var critical = provider.Descriptor.Id.Equals("github", StringComparison.OrdinalIgnoreCase)
             ? GitHubCriticalDomains
             : provider.Descriptor.Id.Equals("gitlab", StringComparison.OrdinalIgnoreCase)
                 ? GitLabCriticalDomains
-                : null;
+                : provider.Descriptor.Id.Equals("antigravity", StringComparison.OrdinalIgnoreCase)
+                    ? AntigravityCriticalDomains
+                    : null;
 
         var domains = provider.Domains;
         if (critical is null)

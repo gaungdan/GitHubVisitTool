@@ -3,6 +3,7 @@ upstream/
 GitHubTurbo/publish/
 GitHubTurbo/single-file/
 bin/
+bin-verify/
 obj/
 *.user
 *.suo

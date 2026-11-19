@@ -35,6 +35,63 @@
 185.199.109.133              raw.github.com
 138.91.182.224               copilot-proxy.githubusercontent.com
 
+# Antigravity Host Start
+# Verified 2026-09-24: Google Frontend anycast that completes TLS for these SNI.
+# Do NOT use 216.239.32.0/24 ghs IPs — TCP/TLS is blackholed from CN.
+172.217.112.4                antigravity.google
+172.217.116.4                antigravity.google
+142.250.113.84               antigravity.google
+203.208.49.130               antigravity.google
+220.181.174.162              antigravity.google
+172.217.112.4                www.antigravity.google
+172.217.116.4                www.antigravity.google
+142.250.113.84               www.antigravity.google
+203.208.49.130               www.antigravity.google
+172.217.112.4                app.antigravity.google
+172.217.116.4                app.antigravity.google
+142.251.34.78                app.antigravity.google
+142.250.113.84               app.antigravity.google
+172.217.112.4                antigravity.withgoogle.com
+172.217.116.4                antigravity.withgoogle.com
+142.250.113.84               antigravity.withgoogle.com
+172.217.112.4                codeassist.google
+142.250.113.84               codeassist.google
+203.208.49.130               codeassist.google
+172.217.112.4                storage.googleapis.com
+172.217.116.4                storage.googleapis.com
+142.250.113.84               storage.googleapis.com
+34.104.35.123                edgedl.me.gvt1.com
+172.217.112.4                edgedl.me.gvt1.com
+172.217.112.4                dl.google.com
+142.250.113.84               dl.google.com
+172.217.112.4                accounts.google.com
+142.250.113.84               accounts.google.com
+203.208.49.130               accounts.google.com
+220.181.174.162              accounts.google.com
+172.217.112.4                oauth2.googleapis.com
+172.217.116.4                oauth2.googleapis.com
+142.250.113.84               oauth2.googleapis.com
+172.217.112.4                cloudcode-pa.googleapis.com
+172.217.116.4                cloudcode-pa.googleapis.com
+172.217.113.4                cloudcode-pa.googleapis.com
+172.217.112.4                generativelanguage.googleapis.com
+172.217.116.4                generativelanguage.googleapis.com
+172.217.118.4                generativelanguage.googleapis.com
+172.217.112.4                www.googleapis.com
+172.217.116.4                www.googleapis.com
+172.217.118.4                www.googleapis.com
+172.217.112.4                apis.google.com
+142.250.113.84               apis.google.com
+203.208.49.130               www.gstatic.com
+220.181.174.162              www.gstatic.com
+203.208.49.130               ssl.gstatic.com
+220.181.174.98               fonts.gstatic.com
+203.208.49.130               fonts.googleapis.com
+220.181.174.162              fonts.googleapis.com
+142.250.113.84               lh3.googleusercontent.com
+203.208.49.130               lh3.googleusercontent.com
+# Antigravity Host End
+
 # Please Star : https://github.com/ineo6/hosts
 # Mirror Repo : https://gitlab.com/ineo6/hosts
 

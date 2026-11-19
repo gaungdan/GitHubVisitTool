@@ -399,7 +399,7 @@ public sealed class AppController : IDisposable
         // Multi-dimensional scoring: ping + TCP + HTTP response.
         // Candidates are probed concurrently (bounded by IpProbeGate) so that
         // one bad candidate cannot serialize the whole domain behind its timeouts.
-        var tasks = candidates.Take(5).Select(async candidate =>
+        var tasks = candidates.Take(8).Select(async candidate =>
         {
             await IpProbeGate.WaitAsync();
             try

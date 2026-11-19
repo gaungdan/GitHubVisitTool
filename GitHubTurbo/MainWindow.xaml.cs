@@ -66,14 +66,22 @@ public partial class MainWindow : Window
 
         RefreshAllHostsIps();
 
-        if (PlatformModules.Count > 0)
+        foreach (var module in PlatformModules)
         {
-            activePlatformId = PlatformModules[0].PlatformId;
-            PlatformModules[0].IsActive = true;
-            foreach (var domain in PlatformDiagnostics.GetDiagnosticDomains(PlatformProviders.All[0]))
-                DomainTests.Add(new DomainDiagnosticViewModel(domain.Domain, domain.Label));
+            var status = controller.PlatformStatuses.GetValueOrDefault(module.PlatformId) ?? TurboStatus.Stopped;
+            if (status.IsRunning)
+                module.IsActive = true;
         }
 
+        if (PlatformModules.Count > 0)
+        {
+            activePlatformId = PlatformModules.FirstOrDefault(m => m.IsActive)?.PlatformId
+                ?? PlatformModules[0].PlatformId;
+            if (!PlatformModules.Any(m => m.IsActive))
+                PlatformModules[0].IsActive = true;
+        }
+
+        SyncDomainTests();
         RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId ?? "") ?? TurboStatus.Stopped);
     }
 
@@ -81,21 +89,57 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName != nameof(PlatformModuleViewModel.IsActive)) return;
         if (sender is not PlatformModuleViewModel vm) return;
-        if (!vm.IsActive) return;
 
-        if (activePlatformId == vm.PlatformId) return;
+        if (vm.IsActive)
+            activePlatformId = vm.PlatformId;
+        else if (activePlatformId == vm.PlatformId)
+            activePlatformId = PlatformModules.FirstOrDefault(m => m.IsActive)?.PlatformId;
 
-        activePlatformId = vm.PlatformId;
+        SyncDomainTests();
+        RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId ?? "") ?? TurboStatus.Stopped);
+    }
 
-        DomainTests.Clear();
-        var provider = PlatformProviders.GetById(vm.PlatformId);
-        if (provider is not null)
+    /// <summary>
+    /// Keeps the network-test list in sync with every selected or running platform,
+    /// instead of replacing it with only the most recently activated one.
+    /// </summary>
+    void SyncDomainTests()
+    {
+        var wanted = new List<(string Host, string Label, string PlatformId, string PlatformTitle)>();
+        foreach (var module in PlatformModules)
         {
+            var status = controller.PlatformStatuses.GetValueOrDefault(module.PlatformId) ?? TurboStatus.Stopped;
+            if (!module.IsActive && !status.IsRunning)
+                continue;
+
+            var provider = PlatformProviders.GetById(module.PlatformId);
+            if (provider is null)
+                continue;
+
             foreach (var domain in PlatformDiagnostics.GetDiagnosticDomains(provider))
-                DomainTests.Add(new DomainDiagnosticViewModel(domain.Domain, domain.Label));
+                wanted.Add((domain.Domain, domain.Label, module.PlatformId, module.Title));
         }
 
-        RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId) ?? TurboStatus.Stopped);
+        for (var i = DomainTests.Count - 1; i >= 0; i--)
+        {
+            if (!wanted.Any(w => w.Host.Equals(DomainTests[i].Host, StringComparison.OrdinalIgnoreCase)))
+                DomainTests.RemoveAt(i);
+        }
+
+        foreach (var item in wanted)
+        {
+            if (DomainTests.Any(d => d.Host.Equals(item.Host, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            DomainTests.Add(new DomainDiagnosticViewModel(item.Host, item.Label, item.PlatformId, item.PlatformTitle));
+        }
+    }
+
+    List<string> GetTargetPlatformIds()
+    {
+        var selected = PlatformModules.Where(m => m.IsActive).Select(m => m.PlatformId).ToList();
+        if (selected.Count > 0)
+            return selected;
+        return activePlatformId is null ? [] : [activePlatformId];
     }
 
     void RefreshAllHostsIps()
@@ -128,14 +172,24 @@ public partial class MainWindow : Window
 
     async void StartButton_Click(object sender, RoutedEventArgs e)
     {
-        if (activePlatformId is null) return;
-        await RunActionAsync(() => controller.StartPlatformAsync(activePlatformId, progress));
+        var targets = GetTargetPlatformIds();
+        if (targets.Count == 0) return;
+        await RunActionAsync(async () =>
+        {
+            foreach (var platformId in targets)
+                await controller.StartPlatformAsync(platformId, progress);
+        });
     }
 
     async void StopButton_Click(object sender, RoutedEventArgs e)
     {
-        if (activePlatformId is null) return;
-        await RunActionAsync(() => controller.StopPlatformAsync(activePlatformId));
+        var targets = GetTargetPlatformIds();
+        if (targets.Count == 0) return;
+        await RunActionAsync(async () =>
+        {
+            foreach (var platformId in targets)
+                await controller.StopPlatformAsync(platformId);
+        });
         MainTabs.SelectedIndex = 0;
     }
 
@@ -220,11 +274,10 @@ public partial class MainWindow : Window
         finally
         {
             HideProgress();
+            RefreshAllHostsIps();
+            SyncDomainTests();
             if (activePlatformId is not null)
-            {
-                RefreshHostsIpsForPlatform(activePlatformId);
                 RenderStatus(controller.PlatformStatuses.GetValueOrDefault(activePlatformId) ?? TurboStatus.Stopped);
-            }
             StartButton.IsEnabled = true;
             StopButton.IsEnabled = true;
             DiagnoseButton.IsEnabled = true;
@@ -239,18 +292,30 @@ public partial class MainWindow : Window
         ShowProgress();
         try
         {
-            if (activePlatformId is null) return;
+            SyncDomainTests();
 
-            var status = controller.PlatformStatuses.GetValueOrDefault(activePlatformId) ?? TurboStatus.Stopped;
-            if (!status.IsRunning)
+            var testedPlatformIds = new List<string>();
+            foreach (var platformId in DomainTests.Select(d => d.PlatformId).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var status = controller.PlatformStatuses.GetValueOrDefault(platformId) ?? TurboStatus.Stopped;
+                if (status.IsRunning)
+                    testedPlatformIds.Add(platformId);
+            }
+
+            if (testedPlatformIds.Count == 0)
             {
                 System.Windows.MessageBox.Show("请先启动加速，再执行网络测试。", "网络测试", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             SetDomainTestsPlaceholder("测试中...", "正在检测连通性");
-            var results = await controller.RunDomainDiagnosticsAsync(activePlatformId, progress);
-            ApplyDomainResults(results);
+            var allResults = new List<DomainDiagnosticResult>();
+            foreach (var platformId in testedPlatformIds)
+            {
+                var results = await controller.RunDomainDiagnosticsAsync(platformId, progress);
+                allResults.AddRange(results);
+            }
+            ApplyDomainResults(allResults, testedPlatformIds);
         }
         finally
         {
@@ -274,11 +339,22 @@ public partial class MainWindow : Window
         }
     }
 
-    void ApplyDomainResults(IReadOnlyList<DomainDiagnosticResult> results)
+    void ApplyDomainResults(IReadOnlyList<DomainDiagnosticResult> results, IReadOnlyCollection<string> testedPlatformIds)
     {
-        var lookup = results.ToDictionary(x => x.Host, StringComparer.OrdinalIgnoreCase);
+        var lookup = results
+            .GroupBy(x => x.Host, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         foreach (var item in DomainTests)
         {
+            if (!testedPlatformIds.Contains(item.PlatformId, StringComparer.OrdinalIgnoreCase))
+            {
+                item.IsSuccess = false;
+                item.Status = "未启动";
+                item.Latency = "--";
+                item.Detail = "该平台尚未启动加速";
+                continue;
+            }
+
             if (!lookup.TryGetValue(item.Host, out var result))
                 continue;
 
@@ -293,6 +369,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            SyncDomainTests();
             if (e.PlatformId == activePlatformId)
                 RenderStatus(e.Status);
         });

@@ -40,6 +40,7 @@ public static class PlatformProviders
 
         Register(GitHubPlatformProvider.Instance);
         Register(GitLabPlatformProvider.Instance);
+        Register(AntigravityPlatformProvider.Instance);
     }
 
     public static IReadOnlyList<IPlatformProvider> All

@@ -93,14 +93,18 @@ public sealed class DomainDiagnosticViewModel : INotifyPropertyChanged
     string detail = "等待测试";
     bool isSuccess;
 
-    public DomainDiagnosticViewModel(string host, string description)
+    public DomainDiagnosticViewModel(string host, string description, string platformId, string platformTitle)
     {
         Host = host;
         Description = description;
+        PlatformId = platformId;
+        PlatformTitle = platformTitle;
     }
 
     public string Host { get; }
     public string Description { get; }
+    public string PlatformId { get; }
+    public string PlatformTitle { get; }
 
     public string Status
     {

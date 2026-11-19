@@ -1,6 +1,5 @@
 using System.IO;
 using System.Net.Http;
-using System.Text.Json;
 
 namespace GitHubTurbo;
 
@@ -24,13 +23,15 @@ public static class CommunityIpService
     static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(4) };
 
     /// <summary>
-    /// Fetches community IP list and extracts GitHub-related domain-to-IP mappings.
-    /// Falls back to the embedded seed list if all mirrors fail.
+    /// Fetches community IP list and extracts domain-to-IP mappings, then merges
+    /// the embedded seed so platforms missing from community hosts (e.g. Antigravity)
+    /// still get fallback candidates. Community entries win on conflicts.
     /// </summary>
     public static async Task<IReadOnlyList<CommunityIpEntry>> FetchGitHubIpsAsync(
         IReadOnlySet<string> targetDomains,
         CancellationToken cancellationToken = default)
     {
+        var community = new List<CommunityIpEntry>();
         foreach (var url in SourceUrls)
         {
             try
@@ -38,11 +39,12 @@ public static class CommunityIpService
                 using var response = await Client.GetAsync(url, cancellationToken);
                 response.EnsureSuccessStatusCode();
                 var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                var entries = ParseHostsContent(content, targetDomains);
+                var entries = ParseHostsContent(content, targetDomains, CommunityIpSource.Ineo6IPv4);
                 if (entries.Count > 0)
                 {
                     await AppLogger.InfoAsync($"Community IP list loaded from {new Uri(url).Host} ({entries.Count} entries).");
-                    return entries;
+                    community = entries.ToList();
+                    break;
                 }
             }
             catch (Exception ex)
@@ -51,8 +53,48 @@ public static class CommunityIpService
             }
         }
 
-        await AppLogger.ErrorAsync("All community IP mirrors failed; using embedded seed list.");
-        return ParseHostsContent(LoadSeedContent(), targetDomains);
+        var seed = ParseHostsContent(LoadSeedContent(), targetDomains, CommunityIpSource.SeedIPv4);
+        if (community.Count == 0 && seed.Count == 0)
+        {
+            await AppLogger.ErrorAsync("All community IP mirrors failed; embedded seed list empty.");
+            return [];
+        }
+
+        if (community.Count == 0)
+            await AppLogger.ErrorAsync("All community IP mirrors failed; using embedded seed list.");
+
+        return MergeWithSeed(community, seed);
+    }
+
+    /// <summary>
+    /// Community list first (higher priority), then seed-only domain/IP pairs.
+    /// Dedupes exact domain+ip collisions so scoring is not double-weighted.
+    /// </summary>
+    static IReadOnlyList<CommunityIpEntry> MergeWithSeed(
+        IReadOnlyList<CommunityIpEntry> community,
+        IReadOnlyList<CommunityIpEntry> seed)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var merged = new List<CommunityIpEntry>(community.Count + seed.Count);
+
+        foreach (var e in community)
+        {
+            if (seen.Add(e.Domain + "|" + e.Ip))
+                merged.Add(e);
+        }
+
+        var extras = 0;
+        foreach (var e in seed)
+        {
+            if (!seen.Add(e.Domain + "|" + e.Ip))
+                continue;
+            merged.Add(e);
+            extras++;
+        }
+
+        if (extras > 0)
+            _ = AppLogger.InfoAsync($"Embedded seed contributed {extras} extra candidates.");
+        return merged;
     }
 
     static string LoadSeedContent()
@@ -79,7 +121,8 @@ public static class CommunityIpService
     /// </summary>
     internal static IReadOnlyList<CommunityIpEntry> ParseHostsContent(
         string content,
-        IReadOnlySet<string> targetDomains)
+        IReadOnlySet<string> targetDomains,
+        CommunityIpSource source = CommunityIpSource.SeedIPv4)
     {
         var entries = new List<CommunityIpEntry>();
 
@@ -106,12 +149,10 @@ public static class CommunityIpService
                 var domain = host.Trim().TrimEnd('/');
                 if (targetDomains.Contains(domain, StringComparer.OrdinalIgnoreCase))
                 {
-                    entries.Add(new CommunityIpEntry(
-                        domain,
-                        ip,
-                        address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
-                            ? CommunityIpSource.Ineo6IPv6
-                            : CommunityIpSource.Ineo6IPv4));
+                    var tagged = address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
+                        ? (source == CommunityIpSource.Ineo6IPv4 ? CommunityIpSource.Ineo6IPv6 : CommunityIpSource.SeedIPv6)
+                        : source;
+                    entries.Add(new CommunityIpEntry(domain, ip, tagged));
                 }
             }
         }
@@ -141,4 +182,6 @@ public enum CommunityIpSource
 {
     Ineo6IPv4,
     Ineo6IPv6,
+    SeedIPv4,
+    SeedIPv6,
 }

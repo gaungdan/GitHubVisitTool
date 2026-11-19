@@ -238,7 +238,7 @@ public sealed class MitmProxyServer : IDisposable
         SslApplicationProtocol negotiated,
         CancellationToken cancellationToken)
     {
-        var tasks = ips.Take(3)
+        var tasks = ips.Take(5)
             .Select(ip => TryConnectOneAsync(domain, ip, mode, negotiated, cancellationToken))
             .ToArray();
 

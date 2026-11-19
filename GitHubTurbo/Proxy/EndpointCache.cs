@@ -91,7 +91,7 @@ public sealed class EndpointCache
         }
 
         if (probed.Count == 0)
-            probed.AddRange(candidates.Take(3).Select(c => c.Ip));
+            probed.AddRange(candidates.Take(5).Select(c => c.Ip));
 
         _entries[domain] = new CacheEntry(probed.ToArray(), DateTime.UtcNow);
         return probed;
